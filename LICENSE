@@ -1,0 +1,127 @@
+CRAFTTHINGY SOFTWARE LICENSE & FAIR-USE ROYALTY AGREEMENT
+=========================================================
+Copyright (c) 2026 Alif Nurhidayat (GitHub: KillerKing93)
+Organization: CraftThingy Digital Innovation
+
+Developer Contact / Kontak Pengembang:
+- Name: Alif Nurhidayat
+- Email: alifnurhidayatwork@gmail.com
+- WhatsApp/Phone: +62 813-6889-8090
+- GitHub: https://github.com/KillerKing93
+
+
+===============================================================================
+[ENGLISH VERSION]
+TERMS OF USE, MODIFICATION, AND LICENSING:
+===============================================================================
+
+1. FREE USE FOR INDIVIDUALS, ACADEMIA & NON-PROFITS:
+   This software is granted free of charge, with full permission to use, study,
+   and execute without fees or royalties, to:
+   a. Individual users, independent developers, students, educators, and researchers.
+   b. Non-profit public service institutions, open-source communities, and micro/small
+      enterprises (MSMEs).
+
+2. FORKS AND DERIVATIVE WORKS (MANDATORY PUBLIC REPOSITORY):
+   a. Users are PERMITTED to fork, modify, adapt, extend, and redistribute this software.
+   b. MANDATORY PUBLIC DISCLOSURE / OPEN FORK:
+      Any modification, enhancement, adaptation, or derivative work built upon this software
+      MUST be made publicly available as an open repository or public fork (e.g. public GitHub
+      repository) accessible to the general public. Creating closed-source or proprietary
+      modifications without explicit prior written consent from the Author is STRICTLY PROHIBITED.
+   c. LICENSE INHERITANCE:
+      Every copy, fork, modified version, or derivative work MUST retain this License Agreement
+      in its entirety, maintain original copyright attribution to Alif Nurhidayat (KillerKing93 /
+      CraftThingy Digital Innovation), and remain subject to all terms herein.
+   d. Forking or rebranding the codebase DOES NOT exempt, waive, or diminish any commercial royalty
+      obligations specified in Section 3 below.
+
+3. ENTERPRISE & COMMERCIAL REVENUE ROYALTY TIERS:
+   Any commercial business, enterprise, manufacturer, contractor, or high-revenue entity
+   utilizing this software (or any fork/derivative thereof) is required to license under
+   one of the following transparent tiers:
+
+   a. HARDWARE MASS-PRODUCTION (FLAT PER-UNIT):
+      - Rate: IDR 5,000 (approx. USD $0.35) per physical unit produced, flashed, or sold.
+      - Settlement: Reported and settled quarterly (every 3 months, ending March, June,
+        September, and December), payable within 30 days of quarter close.
+      - Best for: Manufacturers producing smart controllers, relay modules, and mass consumer devices.
+
+   b. INDUSTRIAL / SINGLE-SITE PROJECT LICENSE:
+      - Rate: IDR 2,000,000 per facility, building, industrial plant, or site installation.
+      - Best for: Contractors and system integrators executing specific client installations (1-3 projects/year).
+
+   c. ANNUAL UNLIMITED PROJECT PASS (ANNUAL LICENSE):
+      - Rate: IDR 12,000,000 per calendar year (equivalent to IDR 1,000,000/month).
+      - Scope: Unlimited client projects and installations during the active 12-month period.
+      - Best for: Active contractors and system integrators with frequent ongoing installations.
+
+   d. PERPETUAL ENTERPRISE BUYOUT (LIFETIME BUYOUT):
+      - Rate: IDR 65,000,000 (one-time payment).
+      - Scope: Permanent, lifetime commercial license for designated product line or enterprise
+        operations without recurring per-unit reporting or ongoing royalties forever.
+      - Best for: Large enterprises, national manufacturers, and corporate conglomerates.
+
+4. DISCLAIMER OF WARRANTY & LIMITATION OF LIABILITY:
+   This software is provided "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED.
+   The Author shall not be held liable for any direct, indirect, incidental, or consequential
+   damages, hardware malfunctions, or third-party disputes arising out of the use of this software.
+
+
+===============================================================================
+[VERSI BAHASA INDONESIA]
+KETENTUAN PENGGUNAAN, MODIFIKASI, DAN LISENSI:
+===============================================================================
+
+1. HAK PENGGUNAAN BEBAS (INDIVIDU, AKADEMISI & NIRLABA):
+   Perangkat lunak ini dapat digunakan secara bebas, dipelajari, dan dijalankan tanpa
+   pungutan biaya oleh:
+   a. Pengguna individu, pengembang perorangan, pelajar, akademisi, dan peneliti.
+   b. Instansi pelayanan publik non-profit, komunitas, dan usaha mikro/kecil (UMKM).
+
+2. KETENTUAN CABANG / TURUNAN (WAJIB CABANG PUBLIK & TERBUKA):
+   a. Pengguna DIIZINKAN untuk membuat cabang (fork), memodifikasi, mengadaptasi,
+      memperluas fitur, dan mendistribusikan perangkat lunak ini.
+   b. KEWAJIBAN KETERBUKAAN SUMBER / CABANG PUBLIK (MANDATORY PUBLIC FORK):
+      Setiap dan seluruh bentuk modifikasi, penambahan fitur, atau karya turunan (derivative works)
+      WAJIB dipublikasikan secara terbuka kepada publik (publicly available) dalam bentuk cabang
+      terbuka (public fork pada repositori Git publik seperti GitHub) atau repositori terbuka lainnya.
+      Dilarang keras membuat modifikasi tertutup atau privat (closed-source/proprietary fork) tanpa
+      izin tertulis eksplisit dari Pengembang Asli.
+   c. KEWAJIBAN PEWARISAN LISENSI (LICENSE INHERITANCE):
+      Setiap salinan, modifikasi, cabang (fork), atau karya turunan WAJIB tetap menyertakan teks
+      lisensi ini secara utuh, mencantumkan atribusi hak cipta asli kepada Alif Nurhidayat
+      (KillerKing93 / CraftThingy Digital Innovation), dan terikat pada seluruh ketentuan lisensi ini.
+   d. Pembuatan cabang (fork) atau pengubahan nama proyek TIDAK MENGHAPUS atau MENGURANGI
+      kewajiban royalti komersial yang diatur pada Pasal 3 di bawah ini.
+
+3. SKEMA DAN TARIF ROYALTI KOMERSIAL / PERUSAHAAN BESAR (ENTERPRISE ROYALTY TIERS):
+   Setiap entitas bisnis komersial, pabrik, manufaktur, kontraktor proyek, atau korporasi
+   berskala besar yang memanfaatkan perangkat lunak ini (maupun cabang/fork modifikasinya)
+   diwajibkan memilih salah satu skema lisensi resmi berikut:
+
+   a. PRODUKSI MASSAL PERANGKAT KERAS (FLAT NOMINAL PER UNIT):
+      - Tarif: Rp 5.000,- (lima ribu Rupiah) per unit perangkat fisik yang diproduksi/didistribusikan.
+      - Penyetoran: Dilaporkan dan disetorkan secara kuartalan (tiap 3 bulan: penutupan Maret,
+        Juni, September, dan Desember), selambat-lambatnya 30 hari kalender setelah kuartal berakhir.
+      - Cocok untuk: Pabrik atau produsen modul/panel yang menjual produk ke pasar secara massal.
+
+   b. LISENSI PROYEK TUNGGAL / INSTALASI INDUSTRI (SINGLE-SITE PROJECT):
+      - Tarif: Rp 2.000.000,- per lokasi fasilitas, gedung, pabrik, atau instalasi proyek.
+      - Cocok untuk: Kontraktor atau integrator sistem yang sesekali mengerjakan proyek klien (1–3 proyek/tahun).
+
+   c. PAKET BEBAS PROYEK TAHUNAN (ANNUAL UNLIMITED PROJECT PASS):
+      - Tarif: Rp 12.000.000,- per tahun kalender (setara Rp 1.000.000/bulan).
+      - Cakupan: Bebas memasang sistem di berapa pun proyek/lokasi fasilitas selama masa aktif 1 tahun.
+      - Cocok untuk: Kontraktor dan integrator sistem aktif dengan jadwal instalasi proyek berkelanjutan.
+
+   d. LISENSI BELI PUTUS SEUMUR HIDUP (PERPETUAL ENTERPRISE BUYOUT):
+      - Tarif: Rp 65.000.000,- (satu kali bayar di muka).
+      - Cakupan: Hak lisensi komersial permanen seumur hidup untuk lini produk atau operasional perusahaan
+        tanpa kewajiban pelaporan berkala per unit atau royalti tahunan selamanya.
+      - Cocok untuk: Korporasi besar, produsen nasional/internasional, dan konglomerasi bisnis.
+
+4. PEMBATASAN DAN PENAFIAN TANGGUNG JAWAB (DISCLAIMER):
+   Perangkat lunak ini disediakan "SEBAGAIMANA ADANYA" (AS IS), tanpa jaminan apa pun, baik tersurat
+   maupun tersirat. Pengembang tidak bertanggung jawab atas kerugian langsung maupun tidak langsung,
+   kerusakan perangkat keras, atau sengketa pihak ketiga di luar ketentuan lisensi ini.
