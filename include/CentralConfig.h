@@ -21,6 +21,8 @@ enum PowerProfilePreset : uint8_t {
     PRESET_CUSTOM       = 6     // User-defined continuous wattage ceiling
 };
 
+#define DEFAULT_MAX_HOUSE_WATTS 1300.0f
+
 struct PowerProfileConfig {
     PowerProfilePreset preset;
     float              maxWatts;            // Nominal breaker rating (e.g. 1300.0f)
