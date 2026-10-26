@@ -173,3 +173,47 @@ Total active power is kept strictly below 1170W, eliminating nuisance thermal tr
 1. **Tier 1 (New ESP32 + Existing SD Card)**: Insert the SD card into a replacement ESP32; it restores keys from `recovery_vault.bin` and resumes operation with zero re-pairing.
 2. **Tier 2 (Cloud / Laptop Vault Export)**: The dashboard supports downloading an encrypted `craftthingy_vault.enc` anytime for offsite backup.
 3. **Tier 3 (3-Power-Cycle Physical Override)**: If both the ESP32 and SD card are destroyed with no backup, cycling power to a satellite 3 times within 5 seconds wipes its dead-hub lock and re-opens pairing adoption.
+
+---
+
+## 6. Adaptive Predictions, Virtual MCB Thermal Model & Learning
+
+Standard smart homes only act *reactively* after a breaker trips or when power is already exceeded. CraftThingy Central Control acts *predictively* by learning appliance characteristics and emulating physical breaker mechanics.
+
+### A. Motor Inrush Surge Fingerprinting
+Inductive motors (such as deep-well water pumps, compressors, and power tools) pull an instantaneous inrush spike 2–3x higher than their rated continuous running power, lasting 200–500ms during rotor spin-up.
+1. **Waveform Observer**:
+   * During the first 1.5 seconds of appliance startup, `ApplianceLearner` samples power factor and instantaneous wattage at high frequency.
+   * Extracts peak surge wattage ($\Delta P_{\text{surge}}$), inrush duration ($T_{\text{surge}}$), and steady-state operating wattage ($P_{\text{steady}}$).
+   * Fingerprints are saved to ESP32 internal NVS flash and updated adaptively over time.
+2. **Predictive 3-Second Siphoning**:
+   * If available margin can easily accommodate steady-state pump load (e.g., 550W) but would be breached by the 350ms inrush spike (e.g., 1150W), the Brain **does not reject the pump**.
+   * Instead, it pauses lower-priority pausable loads (washing machine, charger) for **strictly 3 seconds** (`_inrushSiphonExpireMs`).
+   * Once the motor stabilizes to steady-state running power, the paused loads automatically resume with zero user disruption.
+
+### B. Virtual MCB Thermal Accumulation Model ($I^2t$)
+Physical miniature circuit breakers (MCBs) trip via a bimetallic strip that bends as heat accumulates according to the Joule heating law:
+$$\Delta Q_{\text{in}} \propto I^2 \cdot R \cdot \Delta t$$
+When multiple loads run near 100% capacity, the physical breaker accumulates heat and becomes "hot", tripping much faster on subsequent small spikes.
+
+1. **Continuous Thermal Heat Emulation**:
+   * The Central Brain models breaker thermal state from 0% (ambient cold) to 100% (physical trip threshold) every second.
+   * Thermal cooling follows Newton's Law of Cooling with an exponential dissipation constant ($\tau \approx 45\text{s}$).
+2. **Predictive Inrush Safety Gate**:
+   * Before granting any motor start permit, `isSafeForInrushSpike(currentWatts, expectedSurge, surgeDurMs)` calculates the projected thermal delta.
+   * If the virtual MCB is already thermally hot ($\ge 75\%$), the motor start is deferred to queue until the breaker dissipates heat below 60%.
+3. **Trip Time Estimation**:
+   * Returns real-time `estimateTimeToTripSec(currentWatts)` to forecast seconds remaining before a sustained overload causes physical tripping.
+
+### C. Self-Calibrating Probing Run for Unknown Devices
+When an unregistered or uncharacterized appliance is connected:
+1. **Quiet-Grid Discovery**:
+   * Hub checks if grid baseline power is quiet ($< 500\text{W}$).
+2. **Controlled Test Pulse (`PROBE_PULSE_RUNNING`)**:
+   * Hub commands satellite to fire a 3-second diagnostic pulse.
+   * Captures precise inrush peak, power factor, and steady-state wattage.
+   * Commits the learned profile to NVS and MicroSD.
+3. **Over-Limit Countermeasure**:
+   * If a device's steady-state power exceeds the total house ceiling (e.g., 1800W continuous on a 1300W house profile):
+   * Hub cuts the probe pulse immediately ($< 1\text{s}$), flags `isOverLimit = true`, disqualifies the device from future permits, and sounds the warning buzzer. Physical breaker tripping is prevented.
+
