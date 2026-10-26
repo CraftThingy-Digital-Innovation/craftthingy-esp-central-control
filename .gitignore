@@ -1,0 +1,10 @@
+.pio
+.vscode
+.idea
+*.bin
+*.elf
+*.map
+release_assets/
+*.pem
+__pycache__/
+*.pyc
