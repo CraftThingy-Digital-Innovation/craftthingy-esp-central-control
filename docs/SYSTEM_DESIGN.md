@@ -62,9 +62,33 @@ Every appliance node (beginning with the ESP-01S Water Pump) implements a dual-m
 
 ## 3. Power Arbiter & Priority Coordination Engine
 
-### Dynamic Load Shedding & Siphoning Protocol
+### A. Easily Switchable Power Profiles (One-Tap Presets)
+The Central Brain supports instant, zero-reboot switching between power ceilings (saved to NVS flash):
+* `[ 450 W ]` — PLN 450VA / Emergency Off-grid limit
+* `[ 900 W ]` — PLN 900VA limit
+* `[ 1,300 W ★ ]` — PLN 1300VA standard household default
+* `[ 2,200 W ]` — PLN 2200VA upgraded connection
+* `[ 3,500 W ]` — PLN 3500VA high-power tier
+* `[ 800 W Inverter / Solar ]` — Generator / Battery backup inverter mode
+* `[ Custom Slider ]` — Set any custom continuous wattage limit
+
+### B. The 10% Thermal Headroom Cushion
+Circuit breakers trip on thermal bimetal deflection when run continuously at nominal rating. The Brain enforces a configurable **Thermal Headroom Buffer** (default 10%):
+$$\text{Effective Safe Ceiling} = \text{Max Watts} \times (100\% - 10\%) = 1300\text{W} \times 0.90 = \mathbf{1170\text{W}}$$
+Total active power is kept strictly below 1170W, eliminating nuisance thermal trips.
+
+### C. Appliance Priority Hierarchy & Siphoning Table
+
+| Priority Level | Appliance Example | Default Behavior | Pausable? |
+|---|---|---|---|
+| **1. Critical** | **Water Pump** (Low Tank) | Instant permit or siphons power from Priority 2-4 | No (runs to full) |
+| **2. High** | **Refrigerator / Freezer** | Runs on demand; only deferred if breaker is critical | Brief pause only |
+| **3. Normal** | **Washing Machine** | Can be paused for 3–8 minutes to siphon power to pump | Yes (heaters/spin pause) |
+| **4. Low / Deferrable** | **Battery Charger / AC** | Paused first during any surge | Yes |
+
+### D. Dynamic Load Shedding & Siphoning Protocol
 1. **Real-time Margin Calculation**:
-   $$\text{Available Margin} = 1300\text{W} - \text{Real-time Measured PZEM Watts}$$
+   $$\text{Available Margin} = \text{Effective Safe Ceiling} - \text{Real-time Measured PZEM Watts}$$
 2. **Grant Decision**:
    * If $\text{Available Margin} \ge \text{Requested Watts}$: The Brain grants a token immediately.
    * If $\text{Available Margin} < \text{Requested Watts}$: The Brain checks the priority queue.
