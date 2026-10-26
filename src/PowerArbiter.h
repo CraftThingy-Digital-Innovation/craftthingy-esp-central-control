@@ -5,17 +5,28 @@
 #include "CentralConfig.h"
 #include "HardwarePins.h"
 #include "PzemReader.h"
+#include "VirtualMcbModel.h"
+#include "ApplianceLearner.h"
 
 /**
  * ============================================================================
- * CraftThingy Central Control — Power Arbiter & Priority Coordination Engine
+ * CraftThingy Central Control — Predictive Power Arbiter & Priority Engine
  * ============================================================================
- * Enforces the household power ceiling (1300W default) with a 10% thermal trip
- * cushion. Arbitrates permits, queues requests, and coordinates load siphoning.
+ * Enforces the household power ceiling (1300W default) with:
+ * 1. Virtual MCB Thermal Model (I²t bimetal emulation) preventing breaker trips.
+ * 2. Appliance Signature Learner for startup inrush profiling and auto-calibration.
+ * 3. 2-Second Predictive Inrush Siphoning for motor spin-up without tripping.
+ * 4. Priority arbitration queue and dynamic emergency load-shedding.
  */
 class PowerArbiter {
 public:
-    PowerArbiter() : _tokenCounter(100), _deviceCount(0), _activeTokenCount(0), _surgeAlertActive(false) {
+    PowerArbiter() : 
+        _tokenCounter(100), 
+        _deviceCount(0), 
+        _activeTokenCount(0), 
+        _surgeAlertActive(false),
+        _inrushSiphonExpireMs(0)
+    {
         // Default to PLN 1300VA profile with 10% thermal headroom (1170W safe limit)
         _profile.preset = PRESET_1300W;
         _profile.maxWatts = DEFAULT_MAX_HOUSE_WATTS;
@@ -29,6 +40,8 @@ public:
 
     void begin() {
         loadProfileFromNvs();
+        _mcb.begin(_profile.maxWatts);
+        _learner.begin();
     }
 
     // ------------------------------------------------------------------------
@@ -69,6 +82,7 @@ public:
         }
 
         _profile.calculateEffectiveCeiling();
+        _mcb.setRatedWatts(_profile.maxWatts);
         saveProfileToNvs();
     }
 
@@ -122,14 +136,13 @@ public:
     }
 
     // ------------------------------------------------------------------------
-    // Power Permit Token Protocol (Arbiter Engine)
+    // Power Permit Token Protocol (Predictive Arbiter Engine)
     // ------------------------------------------------------------------------
     PowerPermitToken requestPermit(const char* clientMac, float requestedWatts, uint32_t durationSec, const PzemTelemetry& pzem) {
         PowerPermitToken token;
         memset(&token, 0, sizeof(PowerPermitToken));
         token.tokenId = ++_tokenCounter;
         strncpy(token.clientMac, clientMac ? clientMac : "unknown", sizeof(token.clientMac) - 1);
-        token.grantedWatts = requestedWatts;
         token.startMillis = millis();
         token.maxDurationSec = (durationSec > 0 && durationSec <= 3600) ? durationSec : 300;
 
@@ -139,37 +152,79 @@ public:
             strncpy(token.applianceRole, _devices[devIdx].role, sizeof(token.applianceRole) - 1);
         }
 
-        float currentGridWatts = pzem.isOnline ? pzem.power : calculateAllocatedWatts();
-        float availableMargin = _profile.effectiveCeilingWatts - currentGridWatts;
-
-        // Case A: Margin is available immediately
-        if (availableMargin >= requestedWatts) {
-            token.status = TOKEN_GRANTED;
-            addActiveToken(token);
-            if (devIdx >= 0) _devices[devIdx].hasActivePermit = true;
+        // Check if device was previously disqualified by probing run (e.g. 1800W draw)
+        ApplianceSignature* sig = _learner.getSignature(clientMac);
+        if (sig && sig->isOverLimit) {
+            token.status = TOKEN_REJECTED_OVERLOAD;
+            token.grantedWatts = 0.0f;
             return token;
         }
 
-        // Case B: Power is tight -> Check if high priority can siphon power by pausing lower priority
-        if (clientPriority == PRIORITY_CRITICAL) {
-            // Find an active pausable token with lower priority
+        // Use learned steady-state and inrush surge values if profiled
+        float effectiveWatts = (sig && sig->learnedSteadyWatts > 20.0f) ? sig->learnedSteadyWatts : requestedWatts;
+        float expectedSurge = (sig && sig->learnedSurgeWatts > 20.0f) ? sig->learnedSurgeWatts : (effectiveWatts * 1.8f);
+        uint32_t surgeDurMs = (sig && sig->learnedSurgeDurationMs > 0) ? sig->learnedSurgeDurationMs : 350;
+        token.grantedWatts = effectiveWatts;
+
+        float currentGridWatts = pzem.isOnline ? pzem.power : calculateAllocatedWatts();
+        float availableMargin = _profile.effectiveCeilingWatts - currentGridWatts;
+
+        // Predictive Virtual MCB Thermal Check:
+        // Even if steady power fits, can the physical breaker's bimetal strip absorb the inrush spike?
+        if (!_mcb.isSafeForInrushSpike(currentGridWatts, expectedSurge, surgeDurMs)) {
+            // Breaker is thermally hot! Hold off motor start to prevent thermal tripping
+            token.status = TOKEN_QUEUED;
+            return token;
+        }
+
+        // Case A: Margin can accommodate BOTH steady power and inrush surge immediately
+        if (availableMargin >= (effectiveWatts + expectedSurge * 0.5f)) {
+            token.status = TOKEN_GRANTED;
+            addActiveToken(token);
+            if (devIdx >= 0) _devices[devIdx].hasActivePermit = true;
+            _learner.onApplianceStart(clientMac, currentGridWatts);
+            return token;
+        }
+
+        // Case B: Margin accommodates steady power, BUT inrush surge is too close to ceiling
+        // Action: 2-Second Predictive Siphoning (pause lower-priority load just during spin-up!)
+        if (availableMargin >= effectiveWatts) {
             for (uint8_t i = 0; i < _activeTokenCount; i++) {
                 int activeDevIdx = findDeviceIndex(_activeTokens[i].clientMac);
-                if (activeDevIdx >= 0 && _devices[activeDevIdx].isPausable && _devices[activeDevIdx].priority > PRIORITY_CRITICAL) {
-                    // Pause the lower priority appliance
+                if (activeDevIdx >= 0 && _devices[activeDevIdx].isPausable && _devices[activeDevIdx].priority > clientPriority) {
+                    // Temporarily pause for 3 seconds to clear the surge window
                     _activeTokens[i].status = TOKEN_PAUSED_BY_SHED;
                     _devices[activeDevIdx].hasActivePermit = false;
+                    _inrushSiphonExpireMs = millis() + 3000; // Auto-resume in 3s
 
-                    // Siphon power to critical client
                     token.status = TOKEN_GRANTED;
                     addActiveToken(token);
                     if (devIdx >= 0) _devices[devIdx].hasActivePermit = true;
+                    _learner.onApplianceStart(clientMac, currentGridWatts);
                     return token;
                 }
             }
         }
 
-        // Case C: Insufficient power and cannot siphon -> Queue request
+        // Case C: Continuous power is tight -> High-priority full siphoning
+        if (clientPriority == PRIORITY_CRITICAL) {
+            for (uint8_t i = 0; i < _activeTokenCount; i++) {
+                int activeDevIdx = findDeviceIndex(_activeTokens[i].clientMac);
+                if (activeDevIdx >= 0 && _devices[activeDevIdx].isPausable && _devices[activeDevIdx].priority > PRIORITY_CRITICAL) {
+                    // Full pause of lower-priority appliance for duration of pump run
+                    _activeTokens[i].status = TOKEN_PAUSED_BY_SHED;
+                    _devices[activeDevIdx].hasActivePermit = false;
+
+                    token.status = TOKEN_GRANTED;
+                    addActiveToken(token);
+                    if (devIdx >= 0) _devices[devIdx].hasActivePermit = true;
+                    _learner.onApplianceStart(clientMac, currentGridWatts);
+                    return token;
+                }
+            }
+        }
+
+        // Case D: Cannot accommodate or siphon -> Queue request
         token.status = TOKEN_QUEUED;
         return token;
     }
@@ -180,7 +235,7 @@ public:
                 int devIdx = findDeviceIndex(_activeTokens[i].clientMac);
                 if (devIdx >= 0) _devices[devIdx].hasActivePermit = false;
 
-                // Remove token by sliding array
+                // Slide array
                 for (uint8_t j = i; j < _activeTokenCount - 1; j++) {
                     _activeTokens[j] = _activeTokens[j + 1];
                 }
@@ -195,12 +250,25 @@ public:
     }
 
     // ------------------------------------------------------------------------
-    // Periodic Supervisory Loop (Heartbeat timeouts & Surge check)
+    // Periodic Supervisory Loop (Thermal MCB update, Probing & Surge defense)
     // ------------------------------------------------------------------------
     void loop(const PzemTelemetry& pzem) {
         uint32_t now = millis();
+        float currentPower = pzem.isOnline ? pzem.power : calculateAllocatedWatts();
 
-        // Expire expired tokens
+        // 1. Update Virtual MCB Thermal Accumulator
+        _mcb.update(currentPower);
+
+        // 2. Feed startup inrush observer with real-time waveform
+        _learner.observeStartupSample(currentPower, pzem.powerFactor);
+
+        // 3. Handle Predictive Inrush Siphon expiration (auto-resume after 3s motor spin-up)
+        if (_inrushSiphonExpireMs > 0 && now >= _inrushSiphonExpireMs) {
+            _inrushSiphonExpireMs = 0;
+            resumePausedAppliances();
+        }
+
+        // 4. Expire expired normal tokens
         for (int i = (int)_activeTokenCount - 1; i >= 0; i--) {
             uint32_t elapsedSec = (now - _activeTokens[i].startMillis) / 1000;
             if (elapsedSec > _activeTokens[i].maxDurationSec) {
@@ -208,17 +276,18 @@ public:
             }
         }
 
-        // Check device heartbeat timeouts (60 seconds)
+        // 5. Device heartbeat timeouts (60 seconds)
         for (uint8_t i = 0; i < _deviceCount; i++) {
             if (_devices[i].isOnline && (now - _devices[i].lastSeenMillis > 60000)) {
                 _devices[i].isOnline = false;
             }
         }
 
-        // Physics check: If physical PZEM measures surge nearing ceiling, enforce emergency load-shed
-        if (pzem.isOnline && pzem.power >= (_profile.maxWatts - 50.0f)) {
+        // 6. Thermal Breaker Emergency Protection:
+        // If Virtual MCB heat crosses 88% or PZEM physical watts breach ceiling:
+        if (_mcb.isNearTripThreshold() || (pzem.isOnline && pzem.power >= (_profile.maxWatts - 40.0f))) {
             _surgeAlertActive = true;
-            // Emergency: Pause all pausable appliances immediately!
+            // Emergency: Immediately shed all pausable loads!
             for (uint8_t i = 0; i < _activeTokenCount; i++) {
                 int devIdx = findDeviceIndex(_activeTokens[i].clientMac);
                 if (devIdx >= 0 && _devices[devIdx].isPausable && _activeTokens[i].status == TOKEN_GRANTED) {
@@ -226,7 +295,7 @@ public:
                     _devices[devIdx].hasActivePermit = false;
                 }
             }
-        } else if (_surgeAlertActive && pzem.power < (_profile.effectiveCeilingWatts - 200.0f)) {
+        } else if (_surgeAlertActive && !_mcb.isBreakerHot() && pzem.power < (_profile.effectiveCeilingWatts - 150.0f)) {
             _surgeAlertActive = false;
             resumePausedAppliances();
         }
@@ -240,6 +309,14 @@ public:
         return _surgeAlertActive;
     }
 
+    const VirtualMcbModel& getMcb() const {
+        return _mcb;
+    }
+
+    ApplianceLearner& getLearner() {
+        return _learner;
+    }
+
 private:
     PowerProfileConfig  _profile;
     uint32_t            _tokenCounter;
@@ -248,6 +325,10 @@ private:
     uint8_t             _activeTokenCount;
     PowerPermitToken    _activeTokens[MAX_REGISTERED_DEVICES];
     bool                _surgeAlertActive;
+    uint32_t            _inrushSiphonExpireMs;
+
+    VirtualMcbModel     _mcb;
+    ApplianceLearner    _learner;
 
     int findDeviceIndex(const char* mac) {
         if (!mac) return -1;
