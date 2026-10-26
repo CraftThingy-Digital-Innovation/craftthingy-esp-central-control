@@ -1,0 +1,1062 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CraftThingy ESP Device Manager</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --border: #334155;
+      --accent: #38bdf8;
+      --accent-hover: #0284c7;
+      --text: #f8fafc;
+      --text-dim: #94a3b8;
+      --success: #22c55e;
+      --danger: #ef4444;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 24px;
+      display: flex;
+      justify-content: center;
+    }
+    .container { width: 100%; max-width: 720px; }
+    header { margin-bottom: 24px; text-align: center; }
+    header h1 { font-size: 1.8rem; color: var(--accent); margin-bottom: 6px; }
+    header p { color: var(--text-dim); font-size: 0.95rem; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+    .card h2 { font-size: 1.2rem; margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+    .form-group { margin-bottom: 14px; }
+    label { display: block; font-size: 0.85rem; color: var(--text-dim); margin-bottom: 6px; font-weight: 500; }
+    input, select {
+      width: 100%;
+      background: #0b1120;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 12px;
+      color: var(--text);
+      font-size: 0.95rem;
+      outline: none;
+    }
+    input:focus, select:focus { border-color: var(--accent); }
+    .btn-group { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+    button {
+      flex: 1;
+      min-width: 130px;
+      background: var(--accent);
+      color: #000;
+      font-weight: 600;
+      border: none;
+      border-radius: 6px;
+      padding: 10px 16px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button:hover { background: var(--accent-hover); }
+    button.secondary { background: #334155; color: var(--text); }
+    button.secondary:hover { background: #475569; }
+    button.danger { background: var(--danger); color: #fff; }
+    .status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.9rem; }
+    .status-item { background: #0b1120; padding: 10px; border-radius: 6px; }
+    .status-item .label { color: var(--text-dim); font-size: 0.75rem; text-transform: uppercase; }
+    .status-item .val { font-weight: 600; margin-top: 2px; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.75rem; font-weight: 700; }
+    .badge-online { background: rgba(34,197,94,0.2); color: var(--success); }
+    .log-box {
+      background: #020617;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      font-family: monospace;
+      font-size: 0.85rem;
+      color: #38bdf8;
+      max-height: 140px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+    .chip-btn {
+      background: #0b1120;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      font-size: 0.78rem;
+      font-weight: 500;
+      padding: 4px 10px;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .chip-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(56, 189, 248, 0.1);
+    }
+    .toast-container {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 99999;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-width: 380px;
+      pointer-events: none;
+    }
+    .toast {
+      pointer-events: auto;
+      background: #1e293b;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5);
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      animation: toastSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      transition: opacity 0.3s, transform 0.3s;
+    }
+    .toast.info { border-left: 4px solid var(--accent); }
+    .toast.success { border-left: 4px solid var(--success); }
+    .toast.warning { border-left: 4px solid #f59e0b; }
+    .toast.error { border-left: 4px solid var(--danger); }
+    .toast-icon { font-size: 1.2rem; line-height: 1; flex-shrink: 0; margin-top: 2px; }
+    .toast-content { flex: 1; font-size: 0.85rem; }
+    .toast-title { font-weight: 700; color: #fff; margin-bottom: 2px; font-size: 0.9rem; }
+    .toast-msg { color: var(--text-dim); line-height: 1.4; }
+    .toast-close {
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      cursor: pointer;
+      font-size: 1rem;
+      padding: 0;
+      margin-left: 4px;
+      line-height: 1;
+    }
+    .toast-close:hover { color: #fff; }
+    @keyframes toastSlideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+    .spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      border-top-color: #fff;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+<!-- Floating Toast Notification Container -->
+<div id="toastContainer" class="toast-container"></div>
+
+<div class="container">
+  <header>
+    <h1>CraftThingy ESP Manager</h1>
+    <p>Zero-Install Browser Config & HMAC-SHA256 Rolling Key Controller</p>
+  </header>
+
+  <!-- Network Connection Guide Banner -->
+  <div style="background:#1e293b; border:1px solid #0284c7; border-left:4px solid #38bdf8; border-radius:8px; padding:12px 16px; margin-bottom:20px; font-size:0.9rem; line-height:1.5;">
+    <strong style="color:#38bdf8;">📡 Connection Guide:</strong>
+    <div style="color:#94a3b8; margin-top:4px;">
+      • If the device is in setup mode, connect your computer's Wi-Fi to <strong>CraftThingy-5371</strong> (Default IP: <code>192.168.4.1</code>).<br>
+      • If the device is already on your home Wi-Fi, change the address above to its local home IP (e.g. <code>192.168.1.xxx</code>).
+    </div>
+  </div>
+
+  <!-- Unreachable / Connection Error Alert Banner -->
+  <div id="unreachableBanner" style="display:none; background:#450a0a; border:1px solid #ef4444; border-left:4px solid #f87171; border-radius:8px; padding:14px 18px; margin-bottom:20px; font-size:0.92rem; line-height:1.5;">
+    <strong style="color:#f87171; font-size:1.02rem;">⚠️ Could Not Reach ESP at <span id="unreachableIp">192.168.4.1</span></strong>
+    <div style="color:#fecaca; margin-top:6px;">
+      If your device is already connected to your home Wi-Fi, it is no longer reachable at <code>192.168.4.1</code>.<br>
+      <span id="suggestedStaMsg">Last known local router IP: <strong style="color:#fff; font-size:1rem;" id="suggestedStaIp">None saved</strong></span>
+    </div>
+    <div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap;">
+      <button type="button" id="btnSwitchSta" style="background:#ef4444; color:#fff; font-weight:700; flex:none; padding:8px 16px; border-radius:6px; cursor:pointer;" onclick="switchToSavedStaIp()">👉 Switch to Home Wi-Fi IP</button>
+      <button type="button" class="secondary" style="flex:none; padding:8px 16px;" onclick="setHost('craftthingy.local')">Try mDNS (craftthingy.local)</button>
+    </div>
+  </div>
+
+  <!-- Dynamic / Assigned IP Auto-Discovery Banner -->
+  <div id="lanDiscoveryBanner" style="display:none; background:#064e3b; border:1px solid #10b981; border-left:4px solid #34d399; border-radius:8px; padding:14px 18px; margin-bottom:20px; font-size:0.95rem; line-height:1.5;">
+    <strong style="color:#34d399; font-size:1.05rem;">🎉 Wi-Fi Connected Successfully!</strong>
+    <div style="color:#d1fae5; margin-top:6px;">
+      The ESP is now connected to <strong id="discoveredSsid"></strong>.<br>
+      Assigned Local Network IP: <strong style="font-size:1.15rem; color:#fff;" id="discoveredIp">192.168.1.xxx</strong><br>
+      <span style="font-size:0.85rem; color:#a7f3d0;">mDNS Hostname: <code id="discoveredMdns" style="background:#022c22; padding:2px 6px; border-radius:4px;">http://craftthingy.local</code></span>
+    </div>
+    <div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap;">
+      <button style="background:#10b981; color:#064e3b; font-weight:700; flex:none; padding:8px 16px;" onclick="switchToDiscoveredIp()">Switch Manager to this IP</button>
+      <a id="openNewIpLink" href="#" target="_blank" style="display:inline-flex; align-items:center; text-decoration:none; background:#047857; color:#fff; padding:8px 16px; border-radius:6px; font-size:0.9rem; font-weight:600;">Open Direct in New Tab &rarr;</a>
+    </div>
+  </div>
+
+  <!-- Connection & Key Card -->
+  <div class="card">
+    <h2>1. Connection & Security Key</h2>
+    <div class="form-group">
+      <label>ESP Device Address (IP or Hostname)</label>
+      <div style="display:flex; gap:8px;">
+        <input type="text" id="espHost" value="192.168.4.1" placeholder="e.g. 192.168.1.50 or craftthingy.local">
+        <button style="flex:0 0 130px;" onclick="fetchStatus()">Connect</button>
+      </div>
+      <div style="display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; align-items:center;">
+        <span style="font-size:0.75rem; color:var(--text-dim);">Connection Mode:</span>
+        <button type="button" class="chip-btn" id="chipHomeWifi" onclick="switchToSavedStaIp()">🏠 Home Wi-Fi (<span id="chipStaIpText">Dynamic</span>)</button>
+        <button type="button" class="chip-btn" id="chipMdns" onclick="setHost('craftthingy.local')">🌐 mDNS (craftthingy.local)</button>
+        <button type="button" class="chip-btn" onclick="setHost('192.168.4.1')">📶 Setup Hotspot (192.168.4.1)</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Current Secret / Rolling Key</label>
+      <input type="text" id="secretKey" value="a1b2c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff00">
+    </div>
+    <div class="btn-group">
+      <button onclick="fetchStatus()">Refresh Status</button>
+      <button class="secondary" onclick="rotateKey()">Rotate Key Ratchet</button>
+    </div>
+  </div>
+
+  <!-- Device Status Card -->
+  <div class="card">
+    <h2>2. Live Device Status</h2>
+    <div class="status-grid" id="statusGrid">
+      <div class="status-item"><div class="label">Device Name</div><div class="val" id="valName" style="color:var(--accent);">--</div></div>
+      <div class="status-item"><div class="label">Chip Target</div><div class="val" id="valChip">--</div></div>
+      <div class="status-item"><div class="label">Flash Size</div><div class="val" id="valFlash">--</div></div>
+      <div class="status-item"><div class="label">App Version</div><div class="val" id="valAppVer" style="color:#10b981; font-weight:700;">--</div></div>
+      <div class="status-item"><div class="label">Core Version</div><div class="val" id="valCoreVer">--</div></div>
+      <div class="status-item"><div class="label">Active Role</div><div class="val" id="valRole">--</div></div>
+      <div class="status-item"><div class="label">WiFi Status</div><div class="val" id="valWifi">--</div></div>
+      <div class="status-item"><div class="label">Fallback Hotspot</div><div class="val" id="valApSsid">--</div></div>
+      <div class="status-item"><div class="label">IP Address</div><div class="val" id="valIp">--</div></div>
+      <div class="status-item"><div class="label">Rolling Sequence</div><div class="val" id="valSeq">--</div></div>
+      <div class="status-item"><div class="label">OTA Status</div><div class="val" id="valOta">--</div></div>
+    </div>
+  </div>
+
+  <!-- WiFi Configuration Card -->
+  <div class="card">
+    <h2>3. WiFi Provisioning & Network Addressing</h2>
+
+    <h3 style="font-size:0.95rem; color:var(--accent); margin-bottom:10px; border-bottom:1px solid var(--border); padding-bottom:6px;">📡 Wi-Fi Station Credentials (Layer 2)</h3>
+    <div class="form-group">
+      <label>Nearby SSIDs</label>
+      <div style="display:flex; gap:8px;">
+        <select id="scannedSsids" onchange="document.getElementById('wifiSsid').value = this.value">
+          <option value="">-- Click 'Scan WiFi' to find networks --</option>
+        </select>
+        <button style="flex:0 0 120px;" onclick="scanWiFi()">Scan WiFi</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>WiFi SSID</label>
+      <input type="text" id="wifiSsid" placeholder="Network Name">
+    </div>
+    <div class="form-group">
+      <label>WiFi Password</label>
+      <input type="password" id="wifiPass" placeholder="Network Password (leave blank to keep current)">
+    </div>
+    <div class="btn-group" style="margin-bottom:20px;">
+      <button onclick="saveWiFi()">Save & Connect WiFi</button>
+    </div>
+
+    <!-- Decoupled Static IP vs DHCP Section -->
+    <h3 style="font-size:0.95rem; color:#38bdf8; margin-top:20px; margin-bottom:10px; border-bottom:1px solid var(--border); padding-bottom:6px;">🌐 IP Addressing & DNS Configuration (Layer 3)</h3>
+    <div class="form-group">
+      <label style="cursor:pointer; display:flex; align-items:center; gap:8px;">
+        <input type="checkbox" id="useStaticIp" style="width:auto; margin:0;" onchange="toggleStaticIpFields()">
+        <span style="font-size:0.9rem; color:var(--text);">Enable Manual Static IP (Default is DHCP Dynamic IP)</span>
+      </label>
+    </div>
+
+    <div id="staticIpFields" style="display:none; background:#0b1120; border:1px solid var(--border); border-radius:8px; padding:14px; margin-bottom:14px;">
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:10px;">
+        <div>
+          <label>Static IP Address</label>
+          <input type="text" id="staticIp" placeholder="e.g. 192.168.1.150">
+        </div>
+        <div>
+          <label>Subnet Mask</label>
+          <input type="text" id="subnetMask" value="255.255.255.0">
+        </div>
+      </div>
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:10px;">
+        <div>
+          <label>Default Gateway</label>
+          <input type="text" id="gatewayIp" placeholder="e.g. 192.168.1.1">
+        </div>
+        <div>
+          <label>Primary DNS</label>
+          <input type="text" id="dns1Ip" value="8.8.8.8">
+        </div>
+      </div>
+      <div>
+        <label>Secondary DNS (Optional)</label>
+        <input type="text" id="dns2Ip" value="1.1.1.1">
+      </div>
+    </div>
+
+    <div class="btn-group">
+      <button class="secondary" style="background:#0284c7; color:#fff;" onclick="saveIpConfig()">💾 Save IP & DNS Configuration</button>
+    </div>
+  </div>
+
+  <!-- Device Identity & Fallback Hotspot Card -->
+  <div class="card">
+    <h2>4. Device Identity & Fallback Hotspot</h2>
+    <div class="form-group">
+      <label>Internal Device Name (Independent of Wi-Fi Hotspot)</label>
+      <div style="display:flex; gap:8px;">
+        <input type="text" id="devNameInput" placeholder="e.g. Living Room Controller">
+        <button style="flex:0 0 130px;" onclick="saveDeviceName()">Save Name</button>
+      </div>
+    </div>
+    <div class="form-group" style="margin-top:14px;">
+      <label>Fallback Wi-Fi Hotspot SSID & Password (WPA2)</label>
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+        <input type="text" id="apSsidInput" placeholder="Hotspot SSID (e.g. CraftThingy-5371)">
+        <input type="password" id="apPassInput" placeholder="WPA2 Password (min 8 chars, or empty for open)">
+      </div>
+      <div class="btn-group" style="margin-top:10px;">
+        <button class="secondary" onclick="saveAPConfig()">Save Hotspot Settings</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- GitHub OTA Configuration Card -->
+  <div class="card">
+    <h2>5. GitHub OTA Targets & Application Source</h2>
+    <div class="form-group">
+      <label>Application Preset or Custom Repository</label>
+      <select id="repoPreset" onchange="onRepoPresetChanged()">
+        <option value="water_pump">💧 Official: Water Pump (craftthingy-esp-water-pump)</option>
+        <option value="washing_machine">🧺 Official: Washing Machine (craftthingy-esp-washing-machine)</option>
+        <option value="core">⚙️ Standalone: Pure Core OTA Framework (craftthingy-esp-core-ota)</option>
+        <option value="custom">🛠️ Custom Developer / Community Application</option>
+      </select>
+    </div>
+
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+      <div class="form-group">
+        <label>GitHub Org / User</label>
+        <input type="text" id="ghOrg" value="CraftThingy-Digital-Innovation">
+      </div>
+      <div class="form-group">
+        <label>Controller Application Repo</label>
+        <input type="text" id="ghCtrl" value="craftthingy-esp-water-pump">
+      </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+      <div class="form-group">
+        <label>Device Role Identifier Tag</label>
+        <input type="text" id="deviceRole" value="water_pump" placeholder="e.g. smart_feeder, hydroponics">
+      </div>
+      <div class="form-group">
+        <label>Core OTA Framework Repo</label>
+        <input type="text" id="ghCore" value="craftthingy-esp-core-ota">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>GitHub Personal Access Token (Optional, for private repositories)</label>
+      <input type="password" id="ghToken" placeholder="ghp_... (Leave blank for public releases)">
+    </div>
+
+    <div style="background:#0b1120; border-left:3px solid var(--accent); padding:10px 14px; border-radius:6px; font-size:0.85rem; color:var(--text-dim); margin-bottom:16px; line-height:1.4;">
+      💡 <strong>Custom Developer Projects:</strong> Anyone can build their own hardware controller on top of CraftThingy Core. Simply enter your GitHub username/organization and repo above. The core automatically matches release assets named <code>{role}-{board}.bin</code> (e.g. <code>smart_feeder-esp01s.bin</code>).
+    </div>
+
+    <!-- Live Interactive OTA Progress Feedback Box -->
+    <div id="otaProgressBox" style="display:none; background:#0b1329; border:1px solid #0284c7; border-left:4px solid #38bdf8; border-radius:8px; padding:14px 16px; margin-bottom:16px;">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <strong id="otaProgressTitle" style="color:#38bdf8; font-size:0.95rem;">🚀 Contacting ESP & Checking GitHub...</strong>
+        <span id="otaProgressSpinner" class="spinner"></span>
+      </div>
+      <p id="otaProgressMsg" style="font-size:0.85rem; color:#94a3b8; margin-top:6px; line-height:1.4;">Connecting to device and checking releases...</p>
+      <div id="otaProgressBarContainer" style="display:none; margin-top:10px; width:100%; height:6px; background:#1e293b; border-radius:3px; overflow:hidden;">
+        <div id="otaProgressBar" style="width:100%; height:100%; background:linear-gradient(90deg, #38bdf8, #818cf8);"></div>
+      </div>
+    </div>
+
+    <div class="btn-group">
+      <button onclick="saveGitHub()">Save & Ratchet Key</button>
+      <button id="btnCheckOta" class="secondary" onclick="triggerUpdate()">Check OTA Now</button>
+      <button class="danger" onclick="rebootDevice()">Reboot ESP</button>
+    </div>
+  </div>
+
+  <!-- Activity Console -->
+  <div class="card">
+    <h2>Activity Console</h2>
+    <div class="log-box" id="logBox">[Ready] Open this file in your browser while connected to ESP WiFi.</div>
+  </div>
+</div>
+
+<script>
+  let rollingSeq = 1;
+
+  function log(msg) {
+    const box = document.getElementById('logBox');
+    const time = new Date().toLocaleTimeString();
+    box.textContent = `[${time}] ${msg}\n` + box.textContent;
+  }
+
+  // Pure in-browser WebCrypto HMAC-SHA256 signature calculation
+  async function computeHmacSha256(keyStr, messageStr) {
+    const enc = new TextEncoder();
+    const keyData = enc.encode(keyStr);
+    const msgData = enc.encode(messageStr);
+
+    const cryptoKey = await window.crypto.subtle.importKey(
+      "raw", keyData, { name: "HMAC", hash: { name: "SHA-256" } }, false, ["sign"]
+    );
+    const sigBuf = await window.crypto.subtle.sign("HMAC", cryptoKey, msgData);
+    const hashArray = Array.from(new Uint8Array(sigBuf));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  function randomHex(bytes) {
+    const arr = new Uint8Array(bytes);
+    window.crypto.getRandomValues(arr);
+    return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  function showToast(type, title, msg, duration = 4500) {
+    const container = document.getElementById('toastContainer');
+    if (!container) return;
+
+    // Dismiss any previous toast to prevent clutter/stacking
+    container.innerHTML = '';
+
+    const icons = {
+      info: 'ℹ️',
+      success: '✅',
+      warning: '⚠️',
+      error: '❌',
+      progress: '🚀'
+    };
+
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.innerHTML = `
+      <div class="toast-icon">${icons[type] || 'ℹ️'}</div>
+      <div class="toast-content">
+        <div class="toast-title">${title}</div>
+        <div class="toast-msg">${msg}</div>
+      </div>
+      <button class="toast-close" onclick="this.parentElement.remove()">✕</button>
+    `;
+
+    container.appendChild(toast);
+
+    if (duration > 0) {
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(100%)';
+        setTimeout(() => toast.remove(), 300);
+      }, duration);
+    }
+    return toast;
+  }
+
+  function isValidIp(ip) {
+    if (!ip || typeof ip !== 'string') return false;
+    const clean = ip.trim();
+    if (clean.includes('unset') || clean === '0.0.0.0' || clean === '192.168.4.1' || clean === '--') return false;
+    const parts = clean.split('.');
+    if (parts.length !== 4) return false;
+    return parts.every(p => {
+      const n = Number(p);
+      return !isNaN(n) && n >= 0 && n <= 255 && p === n.toString();
+    });
+  }
+
+  function updateHostChipLabels(ip) {
+    const textEl = document.getElementById('chipStaIpText');
+    const suggEl = document.getElementById('suggestedStaIp');
+    const btnSwitch = document.getElementById('btnSwitchSta');
+    if (isValidIp(ip)) {
+      if (textEl) textEl.textContent = ip;
+      if (suggEl) suggEl.textContent = ip;
+      if (btnSwitch) {
+        btnSwitch.textContent = `👉 Switch to Home Wi-Fi IP (${ip})`;
+        btnSwitch.style.display = 'inline-block';
+      }
+    } else {
+      if (textEl) textEl.textContent = 'Enter IP';
+      if (suggEl) suggEl.textContent = 'None saved yet';
+      if (btnSwitch) btnSwitch.style.display = 'none';
+    }
+  }
+
+  function switchToSavedStaIp() {
+    const lastSta = localStorage.getItem('craftthingy_esp_last_sta_ip');
+    if (isValidIp(lastSta)) {
+      setHost(lastSta);
+    } else {
+      const promptIp = prompt("Enter your ESP's Home Wi-Fi IP (e.g. 192.168.1.150):");
+      if (promptIp && promptIp.trim() && isValidIp(promptIp.trim())) {
+        setHost(promptIp.trim());
+      }
+    }
+  }
+
+  function toggleStaticIpFields() {
+    const chk = document.getElementById('useStaticIp');
+    const box = document.getElementById('staticIpFields');
+    if (box && chk) {
+      box.style.display = chk.checked ? 'block' : 'none';
+    }
+  }
+
+  function setHost(host) {
+    document.getElementById('espHost').value = host;
+    localStorage.setItem('craftthingy_esp_host', host);
+    log(`Target host changed to: ${host}`);
+    showToast('info', 'Target IP Changed', `Connecting to ${host}...`);
+    fetchStatus();
+  }
+
+  async function apiRequest(method, path, bodyObj = null) {
+    const host = document.getElementById('espHost').value.trim();
+    const key = document.getElementById('secretKey').value.trim();
+    const url = `http://${host}${path}`;
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const nonce = randomHex(8);
+    const bodyStr = bodyObj ? JSON.stringify(bodyObj) : "";
+    const cleanPath = path.split('?')[0];
+    const payloadToSign = `${method}\n${cleanPath}\n${timestamp}\n${nonce}\n${bodyStr}`;
+    const signature = await computeHmacSha256(key, payloadToSign);
+
+    const headers = {
+      'Content-Type': 'application/json',
+      'X-Signature': signature,
+      'X-Timestamp': timestamp,
+      'X-Nonce': nonce,
+      'X-Sequence': '0',
+      'Authorization': `Bearer ${key}`,
+      'X-Master-Key': key
+    };
+
+    const options = { method, headers };
+    if (bodyStr) options.body = bodyStr;
+
+    log(`--> ${method} ${path}`);
+    try {
+      const res = await fetch(url, options);
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`HTTP ${res.status}: ${errText}`);
+      }
+      const json = await res.json();
+      log(`<-- Response: ${JSON.stringify(json)}`);
+      return json;
+    } catch (err) {
+      log(`[Connection Error] Could not reach http://${host}${path}`);
+      log(`[Hint] Is your computer or phone connected to the 'CraftThingy-5371' Wi-Fi? (Current target IP: ${host})`);
+      throw err;
+    }
+  }
+
+  async function fetchStatus() {
+    const host = document.getElementById('espHost').value.trim();
+    try {
+      const json = await apiRequest('GET', '/api/v1/system/status');
+      const data = json.data || json;
+      const sys = data.system || data;
+      const net = data.network || {};
+      const ota = data.ota || {};
+      const sec = data.security || {};
+
+      // Hide unreachable alert if previously shown
+      const unreach = document.getElementById('unreachableBanner');
+      if (unreach) unreach.style.display = 'none';
+
+      document.getElementById('valName').textContent = sys.name || data.name || data.deviceName || "CraftThingy-Device";
+      if (!document.getElementById('devNameInput').value && (sys.name || data.name)) {
+        document.getElementById('devNameInput').value = sys.name || data.name;
+      }
+      document.getElementById('valChip').textContent = sys.chip ? `${sys.chip} (${sys.boardTarget || ''})` : (data.chip || "Unknown");
+      document.getElementById('valFlash').textContent = sys.flashBytes ? `${(sys.flashBytes / 1024 / 1024).toFixed(1)} MB` : (data.flashBytes ? `${(data.flashBytes / 1024 / 1024).toFixed(1)} MB` : "1.0 MB");
+      document.getElementById('valAppVer').textContent = sys.appVersion || data.appVersion || '--';
+      document.getElementById('valCoreVer').textContent = sys.coreVersion || data.coreVersion || "1.1.0";
+      document.getElementById('valRole').textContent = ota.activeRole || data.activeRole || "water_pump";
+      document.getElementById('valWifi').textContent = net.state || data.wifiState || "ap_mode";
+      document.getElementById('valApSsid').textContent = net.apSsid ? `${net.apSsid} ${net.apSecured ? '[🔒 WPA2]' : '[Open]'}` : (net.state === 'ap_mode' ? 'Broadcasting' : '--');
+      const rawSta = net.staIp || (net.state === 'connected' ? net.ip : null);
+      const staIp = isValidIp(rawSta) ? rawSta : null;
+      if (net.state === 'connected' && staIp) {
+        const apDisplay = isValidIp(net.apIp) ? net.apIp : '--';
+        document.getElementById('valIp').textContent = `${staIp} (AP: ${apDisplay})`;
+        const banner = document.getElementById('lanDiscoveryBanner');
+        banner.style.display = 'block';
+        document.getElementById('discoveredSsid').textContent = net.ssid || "Home Wi-Fi";
+        document.getElementById('discoveredIp').textContent = staIp;
+        localStorage.setItem('craftthingy_esp_last_sta_ip', staIp);
+        const hostName = (sys.name || 'craftthingy').toLowerCase().replace(/\s+/g, '-');
+        document.getElementById('discoveredMdns').textContent = `http://${hostName}.local`;
+        document.getElementById('openNewIpLink').href = `http://${staIp}`;
+      } else {
+        const fallbackIp = isValidIp(net.ip) ? net.ip : (isValidIp(net.apIp) ? net.apIp : "192.168.4.1");
+        document.getElementById('valIp').textContent = fallbackIp;
+      }
+
+      if (net.useStatic !== undefined && !document.getElementById('useStaticIp').dataset.userTouched) {
+        document.getElementById('useStaticIp').checked = !!net.useStatic;
+        toggleStaticIpFields();
+        if (net.staticIp) document.getElementById('staticIp').value = net.staticIp;
+        if (net.gateway && net.gateway !== '0.0.0.0') {
+          document.getElementById('gatewayIp').value = net.gateway;
+        } else if (net.staticIp) {
+          const parts = net.staticIp.split('.');
+          if (parts.length === 4) document.getElementById('gatewayIp').value = `${parts[0]}.${parts[1]}.${parts[2]}.1`;
+        }
+        if (net.subnet) document.getElementById('subnetMask').value = net.subnet;
+        if (net.dns && net.dns !== '0.0.0.0') {
+          document.getElementById('dns1Ip').value = net.dns;
+        } else {
+          document.getElementById('dns1Ip').value = document.getElementById('gatewayIp').value || '1.1.1.1';
+        }
+      }
+
+      // Dynamic mDNS Hostname in chip
+      const devMdnsName = (sys.name || 'craftthingy').toLowerCase().replace(/[\s_]+/g, '-') + '.local';
+      const chipMdns = document.getElementById('chipMdns');
+      if (chipMdns) {
+        chipMdns.textContent = `🌐 mDNS (${devMdnsName})`;
+        chipMdns.onclick = () => setHost(devMdnsName);
+      }
+
+      document.getElementById('valSeq').textContent = sec.rollingSequence !== undefined ? sec.rollingSequence : (data.rollingSequence || 1);
+      document.getElementById('valOta').textContent = ota.status || data.otaStatus || "Idle";
+
+      // Sync OTA target inputs if user hasn't modified them
+      if (ota.org && !document.getElementById('ghOrg').dataset.userTouched) document.getElementById('ghOrg').value = ota.org;
+      if (ota.coreRepo && !document.getElementById('ghCore').dataset.userTouched) document.getElementById('ghCore').value = ota.coreRepo;
+      if (ota.controllerRepo !== undefined && !document.getElementById('ghCtrl').dataset.userTouched) document.getElementById('ghCtrl').value = ota.controllerRepo;
+      if (ota.activeRole && !document.getElementById('deviceRole').dataset.userTouched) document.getElementById('deviceRole').value = ota.activeRole;
+
+      // Sync preset dropdown
+      const currentCtrl = ota.controllerRepo || '';
+      const currentRole = ota.activeRole || 'water_pump';
+      const presetSelect = document.getElementById('repoPreset');
+      if (!presetSelect.dataset.userTouched) {
+        if (currentRole === 'water_pump' && currentCtrl === 'craftthingy-esp-water-pump') {
+          presetSelect.value = 'water_pump';
+        } else if (currentRole === 'washing_machine' && currentCtrl === 'craftthingy-esp-washing-machine') {
+          presetSelect.value = 'washing_machine';
+        } else if (currentRole === 'core' || !currentCtrl) {
+          presetSelect.value = 'core';
+        } else {
+          presetSelect.value = 'custom';
+        }
+      }
+
+      log(`Status updated successfully. ESP IP: ${net.ip || data.ip || '192.168.4.1'}`);
+    } catch (e) {
+      log(`Error fetching status: ${e.message}`);
+      const unreach = document.getElementById('unreachableBanner');
+      const lastKnown = localStorage.getItem('craftthingy_esp_last_sta_ip');
+      if (unreach) {
+        document.getElementById('unreachableIp').textContent = host;
+        updateHostChipLabels(lastKnown);
+        unreach.style.display = 'block';
+      }
+      const hint = lastKnown ? `Try switching to your home Wi-Fi IP (${lastKnown})` : 'If connected to home Wi-Fi, click Home Wi-Fi or mDNS';
+      showToast('error', 'Connection Failed', `Could not reach ESP at ${host}. ${hint}`, 5000);
+    }
+  }
+
+  function onRepoPresetChanged() {
+    const preset = document.getElementById('repoPreset').value;
+    const org = document.getElementById('ghOrg');
+    const ctrl = document.getElementById('ghCtrl');
+    const role = document.getElementById('deviceRole');
+    const core = document.getElementById('ghCore');
+
+    document.getElementById('repoPreset').dataset.userTouched = "true";
+    org.dataset.userTouched = "true";
+    ctrl.dataset.userTouched = "true";
+    role.dataset.userTouched = "true";
+
+    if (preset === 'water_pump') {
+      org.value = 'CraftThingy-Digital-Innovation';
+      core.value = 'craftthingy-esp-core-ota';
+      ctrl.value = 'craftthingy-esp-water-pump';
+      role.value = 'water_pump';
+    } else if (preset === 'washing_machine') {
+      org.value = 'CraftThingy-Digital-Innovation';
+      core.value = 'craftthingy-esp-core-ota';
+      ctrl.value = 'craftthingy-esp-washing-machine';
+      role.value = 'washing_machine';
+    } else if (preset === 'core') {
+      org.value = 'CraftThingy-Digital-Innovation';
+      core.value = 'craftthingy-esp-core-ota';
+      ctrl.value = '';
+      role.value = 'core';
+    }
+  }
+
+  async function scanWiFi() {
+    try {
+      log("Scanning nearby networks...");
+      const json = await apiRequest('GET', '/api/v1/wifi/scan');
+      const networks = Array.isArray(json) ? json : (json.data && Array.isArray(json.data) ? json.data : []);
+
+      const sel = document.getElementById('scannedSsids');
+      sel.innerHTML = '<option value="">-- Select Detected SSID --</option>';
+      networks.forEach(n => {
+        const opt = document.createElement('option');
+        opt.value = n.ssid;
+        opt.textContent = `${n.ssid} (${n.rssi} dBm)`;
+        sel.appendChild(opt);
+      });
+      log(`Found ${networks.length} networks.`);
+    } catch (e) {
+      log(`WiFi scan failed: ${e.message}`);
+    }
+  }
+
+  function toggleStaticIpFields() {
+    const chk = document.getElementById('useStaticIp').checked;
+    document.getElementById('staticIpFields').style.display = chk ? 'block' : 'none';
+    document.getElementById('useStaticIp').dataset.userTouched = "true";
+  }
+
+  function switchToDiscoveredIp() {
+    const ip = document.getElementById('discoveredIp').textContent;
+    if (ip && ip !== '192.168.1.xxx') {
+      document.getElementById('espHost').value = ip;
+      log(`Switched target ESP address to: ${ip}`);
+      fetchStatus();
+    }
+  }
+
+  let discoveryInterval = null;
+  function startLanIpDiscovery(ssid) {
+    if (discoveryInterval) clearInterval(discoveryInterval);
+    let attempts = 0;
+    discoveryInterval = setInterval(async () => {
+      attempts++;
+      try {
+        const json = await apiRequest('GET', '/api/v1/system/status');
+        const data = json.data || json;
+        const net = data.network || {};
+        const rawSta = net.staIp || (net.state === 'connected' ? net.ip : null);
+        const staIp = isValidIp(rawSta) ? rawSta : null;
+
+        if (net.state === 'connected' && staIp) {
+          clearInterval(discoveryInterval);
+          discoveryInterval = null;
+          log(`🎉 ESP Successfully connected to ${ssid}! Dynamic Router IP: ${staIp}`);
+          
+          document.getElementById('lanDiscoveryBanner').style.display = 'block';
+          document.getElementById('discoveredSsid').textContent = ssid;
+          document.getElementById('discoveredIp').textContent = staIp;
+          const hostName = (data.system?.name || 'craftthingy').toLowerCase().replace(/\s+/g, '-');
+          document.getElementById('discoveredMdns').textContent = `http://${hostName}.local`;
+          document.getElementById('openNewIpLink').href = `http://${staIp}`;
+          
+          alert(`🎉 ESP Connected to "${ssid}"!\n\nAssigned IP: ${staIp}\n\nSwitch your PC/phone Wi-Fi to "${ssid}" and access the ESP at:\nhttp://${staIp}`);
+        }
+      } catch (e) {
+        // Still connecting or brief renegotiation
+      }
+      if (attempts > 30) {
+        clearInterval(discoveryInterval);
+        discoveryInterval = null;
+        log("[Timeout] Wi-Fi connection check ended. Check router admin table if IP not yet found.");
+      }
+    }, 1500);
+  }
+
+  async function saveWiFi() {
+    try {
+      const ssid = document.getElementById('wifiSsid').value.trim();
+      const pass = document.getElementById('wifiPass').value;
+      if (!ssid) { alert("Please enter SSID"); return; }
+
+      log(`Sending WiFi credentials for "${ssid}"...`);
+      const payload = { ssid, pass };
+      const q = new URLSearchParams({ ssid, pass });
+      await apiRequest('POST', `/api/v1/wifi/config?${q.toString()}`, payload);
+      log(`[Success] Credentials saved! ESP is connecting to "${ssid}" in background...`);
+      showToast('success', 'Wi-Fi Credentials Sent', `Connecting to ${ssid}...`);
+      log(`[Auto-Detect] Polling ESP for newly assigned network IP...`);
+      startLanIpDiscovery(ssid);
+    } catch (e) {
+      log(`Error saving WiFi: ${e.message}`);
+      alert(`❌ Failed to save WiFi: ${e.message}`);
+    }
+  }
+
+  async function saveIpConfig() {
+    try {
+      const useStatic = document.getElementById('useStaticIp').checked;
+      const staticIp = document.getElementById('staticIp').value.trim();
+      const gateway = document.getElementById('gatewayIp').value.trim();
+      const subnet = document.getElementById('subnetMask').value.trim();
+      const dns1 = document.getElementById('dns1Ip').value.trim();
+      const dns2 = document.getElementById('dns2Ip').value.trim();
+
+      if (useStatic) {
+        if (!staticIp) {
+          alert("Please enter the Static IP Address or uncheck 'Enable Manual Static IP' to use DHCP.");
+          return;
+        }
+        if (!gateway || gateway === '0.0.0.0') {
+          alert("Default Gateway cannot be 0.0.0.0 for Static IP. Enter your router's IP (e.g. 192.168.2.1).");
+          return;
+        }
+      }
+
+      log(`Updating IP addressing configuration (${useStatic ? 'Static IP: ' + staticIp : 'DHCP Dynamic IP'})...`);
+      const payload = { useStatic, staticIp, gateway, subnet, dns1, dns2 };
+      await apiRequest('POST', '/api/v1/network/ip', payload);
+      log(`[Success] IP configuration saved! Reapplying network settings on ESP...`);
+      showToast('success', 'IP Settings Saved', useStatic ? `Static IP set to ${staticIp}. Reconnecting...` : 'DHCP enabled. Reconnecting...');
+      
+      if (useStatic && staticIp && staticIp !== document.getElementById('espHost').value.trim()) {
+        setTimeout(() => {
+          setHost(staticIp);
+        }, 3000);
+      } else {
+        setTimeout(fetchStatus, 3000);
+      }
+    } catch (e) {
+      log(`Error saving IP configuration: ${e.message}`);
+      alert(`❌ Failed to save IP configuration: ${e.message}`);
+    }
+  }
+
+  async function saveDeviceName() {
+    try {
+      const name = document.getElementById('devNameInput').value.trim();
+      if (!name) { alert("Please enter device name"); return; }
+      await apiRequest('POST', '/api/v1/system/name', { name });
+      log(`Device internal identification name updated to: ${name}`);
+      setTimeout(fetchStatus, 400);
+    } catch (e) {
+      log(`Error saving device name: ${e.message}`);
+    }
+  }
+
+  async function saveAPConfig() {
+    try {
+      const ssid = document.getElementById('apSsidInput').value.trim();
+      const pass = document.getElementById('apPassInput').value.trim();
+      if (pass && pass.length < 8) {
+        alert("WPA2 Password must be at least 8 characters (or empty for open network)");
+        return;
+      }
+      await apiRequest('POST', '/api/v1/wifi/ap', { ssid, pass });
+      log(`Fallback Hotspot settings saved!`);
+      setTimeout(fetchStatus, 400);
+    } catch (e) {
+      log(`Error saving hotspot config: ${e.message}`);
+    }
+  }
+
+  async function saveGitHub() {
+    try {
+      const org = document.getElementById('ghOrg').value.trim();
+      const core_repo = document.getElementById('ghCore').value.trim();
+      const controller_repo = document.getElementById('ghCtrl').value.trim();
+      const role = document.getElementById('deviceRole').value;
+      const token = document.getElementById('ghToken').value.trim();
+
+      const res = await apiRequest('POST', '/api/v1/github/config', { org, core_repo, controller_repo, role, token });
+      const newKey = res.data?.newRollingKey || res.newRollingKey;
+      if (newKey) {
+        document.getElementById('secretKey').value = newKey;
+        log(`Key ratcheted! New key: ${newKey}`);
+      }
+    } catch (e) {
+      log(`Error saving GitHub settings: ${e.message}`);
+    }
+  }
+
+  async function rotateKey() {
+    try {
+      const res = await apiRequest('POST', '/api/v1/security/rotate-key');
+      const newKey = res.data?.newRollingKey || res.newRollingKey;
+      if (newKey) {
+        document.getElementById('secretKey').value = newKey;
+        log(`Key advanced manually! New key: ${newKey}`);
+      }
+    } catch (e) {
+      log(`Error rotating key: ${e.message}`);
+    }
+  }
+
+  let otaPollActive = false;
+
+  async function pollOtaStatus(attempt = 0) {
+    if (!otaPollActive) return;
+    const btn = document.getElementById('btnCheckOta');
+    const pTitle = document.getElementById('otaProgressTitle');
+    const pMsg = document.getElementById('otaProgressMsg');
+    const pBar = document.getElementById('otaProgressBarContainer');
+
+    if (attempt >= 10) {
+      otaPollActive = false;
+      if (btn) { btn.disabled = false; btn.textContent = "Check OTA Now"; }
+      const currentOta = document.getElementById('valOta').textContent || "Idle";
+      if (pMsg) {
+        if (currentOta === "Idle") {
+          pMsg.textContent = "Check finished: Device returned to Idle. Note: The ESP must be connected to home Wi-Fi with internet access to check GitHub releases.";
+        } else {
+          pMsg.textContent = `Check finished: Device reported '${currentOta}' (see Live Device Status above).`;
+        }
+      }
+      return;
+    }
+
+    try {
+      const json = await apiRequest('GET', '/api/v1/system/status');
+      const data = json.data || json;
+      const ota = data.ota || {};
+      const statusStr = ota.status || "";
+
+      document.getElementById('valOta').textContent = statusStr || "Checking...";
+
+      if (statusStr.includes("Checking for Updates")) {
+        if (pTitle) pTitle.textContent = "🔎 Checking GitHub Releases...";
+        if (pMsg) pMsg.textContent = "ESP is contacting api.github.com and comparing release versions...";
+      } else if (statusStr.includes("Downloading") || statusStr.includes("Flashing")) {
+        if (pTitle) pTitle.textContent = "📥 Downloading Firmware...";
+        if (pMsg) pMsg.textContent = "Downloading release asset from GitHub straight into ESP Flash memory. Do NOT power off!";
+        if (pBar) pBar.style.display = 'block';
+      } else if (statusStr.includes("Success") || statusStr.includes("Rebooting")) {
+        otaPollActive = false;
+        if (pTitle) pTitle.textContent = "🎉 Update Success!";
+        if (pMsg) pMsg.textContent = "Firmware verified and written! ESP is rebooting into new firmware. Reconnecting in 10s...";
+        showToast('success', 'OTA Update Complete!', 'ESP is rebooting into the new firmware.', 8000);
+        if (btn) { btn.disabled = false; btn.textContent = "Check OTA Now"; }
+        setTimeout(fetchStatus, 10000);
+        return;
+      } else if (statusStr.includes("Up to Date")) {
+        otaPollActive = false;
+        if (pTitle) pTitle.textContent = "✅ Firmware Up to Date";
+        if (pMsg) pMsg.textContent = "No newer release found on GitHub. Your ESP is running the latest firmware.";
+        showToast('info', 'Firmware Up to Date', 'Your device is running the latest firmware release.', 5000);
+        if (btn) { btn.disabled = false; btn.textContent = "Check OTA Now"; }
+        return;
+      } else if (statusStr.includes("Failed") || statusStr.includes("Postponed")) {
+        otaPollActive = false;
+        if (pTitle) pTitle.textContent = "⚠️ OTA Check Note";
+        if (pMsg) pMsg.textContent = statusStr;
+        showToast('warning', 'OTA Status', statusStr, 6000);
+        if (btn) { btn.disabled = false; btn.textContent = "Check OTA Now"; }
+        return;
+      }
+    } catch (pollErr) {
+      if (attempt > 2) {
+        log(`[OTA Polling] Connection lost (${pollErr.message}) - device may be updating/rebooting.`);
+      }
+    }
+
+    if (otaPollActive) {
+      setTimeout(() => pollOtaStatus(attempt + 1), 2000);
+    }
+  }
+
+  async function triggerUpdate() {
+    const host = document.getElementById('espHost').value.trim();
+    const btn = document.getElementById('btnCheckOta');
+    const pBox = document.getElementById('otaProgressBox');
+    const pTitle = document.getElementById('otaProgressTitle');
+    const pMsg = document.getElementById('otaProgressMsg');
+    const pBar = document.getElementById('otaProgressBarContainer');
+
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "⏳ Checking OTA...";
+    }
+    if (pBox) pBox.style.display = 'block';
+    if (pTitle) pTitle.textContent = "🚀 Contacting ESP & Checking GitHub...";
+    if (pMsg) pMsg.textContent = `Sending OTA update check trigger to http://${host}...`;
+    if (pBar) pBar.style.display = 'none';
+
+    showToast('info', 'OTA Check Initiated', `Sending update trigger to ${host}...`);
+
+    try {
+      const res = await apiRequest('POST', '/api/v1/ota/check');
+      log("OTA update check triggered successfully!");
+      showToast('success', 'OTA Check Triggered', 'ESP acknowledged update trigger! Checking GitHub releases...', 4000);
+
+      if (pTitle) pTitle.textContent = "🔎 Checking GitHub Releases...";
+      if (pMsg) pMsg.textContent = "ESP received command and is querying api.github.com for release assets...";
+
+      otaPollActive = true;
+      setTimeout(() => pollOtaStatus(0), 1200);
+
+    } catch (e) {
+      log(`Error triggering update: ${e.message}`);
+      if (pTitle) pTitle.textContent = "❌ Connection Failed";
+      if (pMsg) pMsg.textContent = `Could not reach ESP at ${host}. If connected to home Wi-Fi, change IP to 192.168.2.228!`;
+      showToast('error', 'Cannot Reach ESP', `Failed to send OTA command to ${host}. Please check your target IP address!`, 6000);
+      if (btn) { btn.disabled = false; btn.textContent = "Check OTA Now"; }
+    }
+  }
+
+  async function rebootDevice() {
+    if (!confirm("Are you sure you want to reboot the ESP?")) return;
+    try {
+      await apiRequest('POST', '/api/v1/system/reboot');
+      log("Reboot command sent.");
+      showToast('info', 'Rebooting ESP', 'Device reboot command issued. Reconnecting in 6s...', 6000);
+      setTimeout(fetchStatus, 6000);
+    } catch (e) {
+      log(`Reboot error: ${e.message}`);
+      showToast('error', 'Reboot Error', e.message);
+    }
+  }
+
+  window.onload = () => {
+    let lastSta = localStorage.getItem('craftthingy_esp_last_sta_ip');
+    if (lastSta && !isValidIp(lastSta)) {
+      localStorage.removeItem('craftthingy_esp_last_sta_ip');
+      lastSta = null;
+    }
+    updateHostChipLabels(lastSta);
+
+    let savedHost = localStorage.getItem('craftthingy_esp_host');
+    if (savedHost && (savedHost.includes('unset') || !savedHost.trim())) {
+      localStorage.removeItem('craftthingy_esp_host');
+      savedHost = null;
+    }
+
+    if (savedHost) {
+      document.getElementById('espHost').value = savedHost;
+    } else if (isValidIp(lastSta)) {
+      document.getElementById('espHost').value = lastSta;
+    } else {
+      document.getElementById('espHost').value = '192.168.4.1';
+    }
+    fetchStatus();
+  };
+</script>
+</body>
+</html>

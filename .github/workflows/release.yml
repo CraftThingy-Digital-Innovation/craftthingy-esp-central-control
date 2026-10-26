@@ -1,0 +1,189 @@
+name: Build and Release Central Control Firmware
+
+on:
+  push:
+    tags:
+      - 'v*'
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version tag (e.g. v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Central Control Firmware & Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout Core OTA Framework
+        uses: actions/checkout@v4
+        with:
+          repository: CraftThingy-Digital-Innovation/craftthingy-esp-core-ota
+          path: .core_ota_repo
+
+      - name: Link Core Framework Directory
+        run: |
+          mkdir -p ../craftthingy-esp-core-ota
+          cp -r .core_ota_repo/* ../craftthingy-esp-core-ota/
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install PlatformIO Core
+        run: |
+          python -m pip install --upgrade pip
+          pip install platformio intelhex cryptography
+
+      - name: Build All Board Targets
+        run: |
+          pio run -e esp32dev
+          pio run -e esp32s3
+
+      - name: Package Firmware Binaries, Tools & Calculate Hashes
+        run: |
+          mkdir -p release_assets
+          cp .pio/build/esp32dev/firmware.bin release_assets/firmware-central_control-esp32.bin
+          cp .pio/build/esp32s3/firmware.bin release_assets/firmware-central_control-esp32s3.bin
+          
+          # Package Companion Tools & Rescue Utilities
+          cp tools/esp_manager.html release_assets/esp_manager.html
+          cp tools/ota_rescue_bridge.py release_assets/ota_rescue_bridge.py
+          cp tools/central_ctl.py release_assets/central_ctl.py
+          cp tools/RESCUE_GUIDE.md release_assets/RESCUE_GUIDE.md
+
+          cd release_assets
+          for f in *.bin; do
+            sha256sum "$f" > "${f}.sha256"
+          done
+
+      - name: Determine Target Tag & Generate Rich Release Notes
+        id: release_meta
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.version }}"
+          elif [ "${{ github.event_name }}" = "release" ]; then
+            TAG="${{ github.event.release.tag_name }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+
+          # Extract commit logs since previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || git tag -l --sort=-v:refname | sed -n '2p')
+          if [ -n "$PREV_TAG" ]; then
+            APP_COMMITS=$(git log "${PREV_TAG}..HEAD" --pretty=format:"* %s (\`%h\` by @%an)")
+          else
+            APP_COMMITS=$(git log -n 12 --pretty=format:"* %s (\`%h\` by @%an)")
+          fi
+
+          CORE_COMMITS=$(cd .core_ota_repo && git log -n 5 --pretty=format:"* %s (\`%h\` by @%an)")
+
+          # Extract binary sizes
+          SIZE_ESP32=$(wc -c < release_assets/firmware-central_control-esp32.bin)
+          SIZE_ESP32S3=$(wc -c < release_assets/firmware-central_control-esp32s3.bin)
+
+          KB_ESP32=$((SIZE_ESP32 / 1024))
+          KB_ESP32S3=$((SIZE_ESP32S3 / 1024))
+
+          cat << EOF > release_notes.md
+          ## ⚡ CraftThingy Central Control & 1300W Energy Arbiter - ${TAG}
+
+          Official production release of the **Central Control & Household Energy Arbiter** module for the **CraftThingy Digital Innovation** ecosystem.
+
+          ### 🚀 What's Changed in this Release
+          #### ⚡ Central Control Application Updates:
+          ${APP_COMMITS}
+
+          #### ⚙️ Core OTA Framework Updates:
+          ${CORE_COMMITS}
+
+          ---
+
+          ### 📦 Pre-Compiled Firmware Binaries & Hardware Targets
+          Download the appropriate binary matching your ESP32 hardware target:
+
+          | Target Board | Architecture | Flash Size / Partition | Binary Size | Max OTA Slot | Flash Utilization | Asset Name | Checksum |
+          |---|---|---|---|---|---|---|---|
+          | **ESP32 Standard (38-Pin / NodeMCU)** | Dual-Core Xtensa LX6 (240MHz) | 4MB / \`min_spiffs.csv\` | ${KB_ESP32} KB (${SIZE_ESP32} B) | 1,920 KB | ~$((SIZE_ESP32 * 100 / 1966080))% | \`firmware-central_control-esp32.bin\` | \`.sha256\` |
+          | **ESP32-S3 DevKitC-1** | Dual-Core Xtensa LX7 (240MHz) | 8MB / \`default_8MB.csv\` | ${KB_ESP32S3} KB (${SIZE_ESP32S3} B) | 3,328 KB | ~$((SIZE_ESP32S3 * 100 / 3407872))% | \`firmware-central_control-esp32s3.bin\` | \`.sha256\` |
+
+          ---
+
+          ### 🛠️ Companion Management & Rescue Tools
+          Directly download zero-install tools included in this release:
+
+          | Tool Asset | Type | Purpose | How to Run |
+          |---|---|---|---|
+          | **\`esp_manager.html\`** | Single-file Web App | Zero-install browser UI: Live telemetry, dual App/Core versions, Wi-Fi config, HMAC key ratchet | Double-click to open in any browser |
+          | **\`central_ctl.py\`** | Python 3 CLI | Interactive CLI for live power telemetry, profile switching, appliance probing & permit control | \`python tools/central_ctl.py status --host <IP>\` |
+          | **\`ota_rescue_bridge.py\`** | Python 3 Utility | 100% Wireless recovery bridge serving paced 1024-byte TLS records for buffer-limited ESPs | \`python ota_rescue_bridge.py --esp <IP>\` |
+          | **\`RESCUE_GUIDE.md\`** | Markdown Guide | Step-by-step wireless recovery manual for AP mode and isolated environments | Read for troubleshooting |
+
+          ---
+
+          ### 🛡️ Subsystems & Features Included in this Release
+          - **1300W Power Arbiter & Priority Queue**: Real-time continuous coordination keeping total household power safely within the PLN 1300VA ceiling.
+          - **10% Thermal Headroom Cushion**: Enforces an effective continuous safe ceiling of 1170W to eliminate nuisance bimetallic breaker trips.
+          - **Virtual MCB Thermal Accumulation Model ($I^2t$)**: Real-time simulation of physical breaker heat accumulation and dynamic cooling, estimating exact seconds to trip.
+          - **Motor Inrush Surge Fingerprinting**: High-speed startup waveform profiling with **3-second predictive siphoning** (temporarily pausing lower-priority loads only during rotor spin-up).
+          - **Native 3.3V Peacefair PZEM-004T v3/v4 Integration**: Non-blocking Modbus-RTU over Hardware UART2 (GPIO 16 RX / 17 TX) with zero level-shifters.
+          - **INA226 DC Fuel Gauge**: Precision I2C telemetry reading battery bus mV, shunt current mA, power mW, and battery State-of-Charge (SoC).
+          - **Resilient 8GB MicroSD Datalogger**: Non-blocking ring-buffered CSV logging with automatic daily rotation and graceful degradation if card is removed or damaged.
+          - **Dual Disaster Recovery Vault**: Automatic mirroring of Ground Truth keys, power presets, and registered devices to \`recovery_vault.bin\` on MicroSD.
+          - **Zero-Trust Security & 60-Second Physical Pairing Gate**: Time-bounded RSSI-gated pairing and rolling HMAC-SHA256 signature enforcement.
+
+          ---
+
+          ### ⚡ Installation & Flashing Instructions
+
+          #### 1. Over-The-Air (OTA) Switching from Core Firmware
+          To switch a connected ESP running \`craftthingy-esp-core-ota\` to Central Control via API:
+          \`\`\`bash
+          python tools/craftthingy_esp_ctl.py set-github --host 192.168.4.1 \\
+            --org "CraftThingy-Digital-Innovation" \\
+            --ctrl "craftthingy-esp-central-control" \\
+            --role "central_control" \\
+            --key "<CURRENT_KEY>"
+          \`\`\`
+
+          #### 2. First-Time USB Flashing (\`flash_tool.py\`)
+          \`\`\`bash
+          # Probe connected ESP32 board
+          python tools/flash_tool.py probe
+
+          # Flash ESP32 Standard
+          python tools/flash_tool.py flash --bin firmware-central_control-esp32.bin
+          \`\`\`
+
+          ---
+
+          ### 🔐 Security & Integrity
+          All binaries include companion \`.sha256\` checksum files. Verify integrity before flashing:
+          \`\`\`bash
+          sha256sum -c firmware-central_control-esp32.bin.sha256
+          \`\`\`
+          EOF
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "CraftThingy Central Control ${{ steps.release_meta.outputs.tag }}"
+          tag_name: ${{ steps.release_meta.outputs.tag }}
+          body_path: release_notes.md
+          files: release_assets/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
