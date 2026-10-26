@@ -15,11 +15,11 @@ This assignment avoids all ESP32 strapping pins (GPIO 0, 2, 12, 15) and Wi-Fi AD
 | | `VSPI MISO` | **GPIO 19** | Input | 3.3V | Hardware SPI Master In |
 | | `VSPI MOSI` | **GPIO 23** | Output | 3.3V | Hardware SPI Master Out |
 | | `MicroSD CS` | **GPIO 5** | Output | 3.3V | Chip Select (Active LOW) |
-| **User Interface** | `Pairing Button` | **GPIO 32** | Input | 3.3V | Momentary button to GND (Internal Pull-Up enabled) |
-| | `Status LED (RGB/Bicolor)` | **GPIO 25, 26** | Output | 3.3V | Green: Normal / Red: Power Warning / Blue: Pairing |
-| | `Buzzer / Alarm Output` | **GPIO 27** | Output | 3.3V | PWM Piezo buzzer for breaker trip warning |
-| **Auxiliary Relays** | `Shed Relay 1 (Optional)` | **GPIO 4** | Output | 3.3V | Local contactor / relay output |
-| | `Shed Relay 2 (Optional)` | **GPIO 14** | Output | 3.3V | Local contactor / relay output |
+| **Optional UI** | `Pairing Button (Optional)` | **GPIO 32** (or **-1**) | Input | 3.3V | **100% Optional**. Pairing is digital via Web/API. Set to -1 if omitted. |
+| | `Status LED (Optional)` | **GPIO 25** (or **-1**) | Output | 3.3V | **100% Optional**. Status is live in Web UI / REST API. Set to -1 if omitted. |
+| | `Buzzer Alarm (Optional)` | **GPIO 27** (or **-1**) | Output | 3.3V | **100% Optional**. Breaker alerts broadcast over Web/API. Set to -1 if omitted. |
+| **Auxiliary Relays** | `Shed Relay 1 (Optional)` | **GPIO 4** | Output | 3.3V | Local contactor / relay output (Optional) |
+| | `Shed Relay 2 (Optional)` | **GPIO 14** | Output | 3.3V | Local contactor / relay output (Optional) |
 
 ---
 

@@ -36,8 +36,9 @@
 #define PIN_SD_CS           5       // Chip Select (Active LOW)
 
 // ----------------------------------------------------------------------------
-// User Controls, Visual Signals & Audio Alarms
+// User Controls, Visual Signals & Audio Alarms (ALL 100% OPTIONAL)
+// Set to -1 if not wired. All features operate completely digitally via Web / API!
 // ----------------------------------------------------------------------------
-#define PIN_BUTTON_PAIR     32      // Physical 60s Pairing Trigger (Active LOW, internal pull-up)
-#define PIN_LED_STATUS      25      // Status Indicator LED
-#define PIN_BUZZER_ALARM    27      // Piezo Buzzer for 1300W Trip Warning
+#define PIN_BUTTON_PAIR     -1      // Optional: Set to GPIO (e.g. 32) or -1 (Pairing is digital)
+#define PIN_LED_STATUS      -1      // Optional: Set to GPIO (e.g. 25) or -1 (Digital status only)
+#define PIN_BUZZER_ALARM    -1      // Optional: Set to GPIO (e.g. 27) or -1 (Digital alerts only)

@@ -25,12 +25,16 @@ public:
         _lastBuzzerToggleMs(0) {}
 
     void setup() override {
-        // Configure GPIO pins
-        pinMode(PIN_BUTTON_PAIR, INPUT_PULLUP);
-        pinMode(PIN_LED_STATUS, OUTPUT);
-        pinMode(PIN_BUZZER_ALARM, OUTPUT);
-        digitalWrite(PIN_LED_STATUS, LOW);
-        digitalWrite(PIN_BUZZER_ALARM, LOW);
+        // Configure optional UI pins (safely skipped if set to -1)
+        if (PIN_BUTTON_PAIR >= 0) pinMode(PIN_BUTTON_PAIR, INPUT_PULLUP);
+        if (PIN_LED_STATUS >= 0) {
+            pinMode(PIN_LED_STATUS, OUTPUT);
+            digitalWrite(PIN_LED_STATUS, LOW);
+        }
+        if (PIN_BUZZER_ALARM >= 0) {
+            pinMode(PIN_BUZZER_ALARM, OUTPUT);
+            digitalWrite(PIN_BUZZER_ALARM, LOW);
+        }
 
         // Initialize subsystems
         _pzem.begin();
@@ -52,8 +56,8 @@ public:
         const DcTelemetry& dc = _ina226.getTelemetry();
         _sd.logSample(ac, dc, _arbiter.getActivePermitCount(), _arbiter.getProfile().effectiveCeilingWatts);
 
-        // Physical 60-Second Pairing Button Monitor
-        if (digitalRead(PIN_BUTTON_PAIR) == LOW) {
+        // Optional Physical 60-Second Pairing Button Monitor (if wired)
+        if (PIN_BUTTON_PAIR >= 0 && digitalRead(PIN_BUTTON_PAIR) == LOW) {
             delay(50); // Debounce
             if (digitalRead(PIN_BUTTON_PAIR) == LOW && !_pairingWindowActive) {
                 openPairingWindow(60);
@@ -63,10 +67,10 @@ public:
         // Expire Pairing Window after timeout
         if (_pairingWindowActive && (millis() - _pairingOpenedMs > 60000)) {
             _pairingWindowActive = false;
-            digitalWrite(PIN_LED_STATUS, LOW);
+            if (PIN_LED_STATUS >= 0) digitalWrite(PIN_LED_STATUS, LOW);
         }
 
-        // Alarm Buzzer & Status LED logic
+        // Alarm Buzzer & Status LED logic (safely skipped if pins are -1)
         handleSurgeAlarm();
     }
 
@@ -265,7 +269,7 @@ public:
     void openPairingWindow(uint32_t seconds = 60) {
         _pairingWindowActive = true;
         _pairingOpenedMs = millis();
-        digitalWrite(PIN_LED_STATUS, HIGH); // Light up LED to indicate pairing mode
+        if (PIN_LED_STATUS >= 0) digitalWrite(PIN_LED_STATUS, HIGH);
     }
 
     PzemReader&   getPzem()    { return _pzem; }
@@ -286,15 +290,15 @@ private:
 
     void handleSurgeAlarm() {
         if (_arbiter.isSurgeAlertActive()) {
-            // Pulse buzzer every 500ms when breaker is in danger
+            // Pulse buzzer and LED every 500ms when breaker is in danger (if connected)
             if (millis() - _lastBuzzerToggleMs > 500) {
                 _lastBuzzerToggleMs = millis();
-                digitalWrite(PIN_BUZZER_ALARM, !digitalRead(PIN_BUZZER_ALARM));
-                digitalWrite(PIN_LED_STATUS, !digitalRead(PIN_LED_STATUS));
+                if (PIN_BUZZER_ALARM >= 0) digitalWrite(PIN_BUZZER_ALARM, !digitalRead(PIN_BUZZER_ALARM));
+                if (PIN_LED_STATUS >= 0) digitalWrite(PIN_LED_STATUS, !digitalRead(PIN_LED_STATUS));
             }
         } else if (!_pairingWindowActive) {
-            digitalWrite(PIN_BUZZER_ALARM, LOW);
-            digitalWrite(PIN_LED_STATUS, LOW);
+            if (PIN_BUZZER_ALARM >= 0) digitalWrite(PIN_BUZZER_ALARM, LOW);
+            if (PIN_LED_STATUS >= 0) digitalWrite(PIN_LED_STATUS, LOW);
         }
     }
 
