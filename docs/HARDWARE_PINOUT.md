@@ -38,35 +38,53 @@ This assignment avoids all ESP32 strapping pins (GPIO 0, 2, 12, 15) and Wi-Fi AD
 
 ---
 
-## 3. Battery System & XW228DKFR4 LED Meter
+## 3. Battery System & INA226 Power vs Sensing Clarification
+
+The INA226 module has **two completely separate circuits**:
+1. **Chip Power & I2C Logic (`VCC` & `GND`)**:
+   * **Power it directly from 3.3V (`ESP32 3V3` pin)**.
+   * INA226 supports $2.7\text{V} - 5.5\text{V}$ logic. Powering it from 3.3V is the **safest and recommended configuration** because the I2C pull-up resistors will pull `SDA` and `SCL` directly to 3.3V, matching the ESP32 GPIOs without needing any level shifters.
+2. **High-Side Sensing Shunt (`IN+`, `IN-`, and `VBUS`)**:
+   * The shunt resistor measures current flowing out of the battery.
+   * `IN+` & `VBUS` connect to the **Battery Positive terminal** ($3.0\text{V} - 4.2\text{V}$).
+   * `IN-` connects to the **input of the 5V booster / regulator** (the circuit load). The shunt resistor measures whatever current the booster draws from the battery.
 
 ```
-                      ┌────────────────────────────────────────────────────────┐
-                      │                   Battery (+)                          │
-                      └───┬───────────────────────────────┬────────────────────┘
-                          │                               │
-                          ▼                               ▼
-                 ┌──────────────────┐           ┌──────────────────┐
-                 │  INA226 VBUS     │           │ Momentary Button │
-                 │  & Shunt (+)     │           └─────────┬────────┘
-                 └────────┬─────────┘                     │
-                          │                               ▼
-                          │                      [ XW228DKFR4 (+) ]
-                          │                              │
-                          ▼                      [ XW228DKFR4 (-) ]
-                 ┌──────────────────┐                     │
-                 │  INA226 Shunt(-) │                     │
-                 │  (Load / 5V Reg) │                     │
-                 └──────────────────┘                     ▼
-                          │                            [ GND ]
-                          ▼
-                 ┌──────────────────┐
-                 │ 5V Buck Booster  │
-                 │ (Powers ESP32)   │
-                 └──────────────────┘
+                          ┌────────────────────────────────────────────────────────┐
+                          │                   Battery (+) (3.7V - 4.2V)            │
+                          └───┬───────────────────────────────┬────────────────────┘
+                              │                               │
+                              ▼                               ▼
+                     ┌──────────────────┐           ┌──────────────────┐
+                     │  INA226 IN+      │           │ Momentary Button │
+                     │  & VBUS (Sense)  │           └─────────┬────────┘
+                     └────────┬─────────┘                     │
+                              │ (Current Shunt)               ▼
+                              ▼                      [ XW228DKFR4 (+) ]
+                     ┌──────────────────┐                     │
+                     │  INA226 IN-      │            [ XW228DKFR4 (-) ]
+                     │  (Load Side)     │                     │
+                     └────────┬─────────┘                     │
+                              │                               ▼
+                              ▼                            [ GND ]
+                     ┌──────────────────┐
+                     │ 5V Boost Module  │ (Steps 3.7V Li-ion to 5.0V)
+                     └────────┬─────────┘
+                              │ 5V Rail
+                              ▼
+                     ┌──────────────────┐
+                     │ ESP32 5V/VIN Pin │
+                     └────────┬─────────┘
+                              │ Internal 3.3V LDO
+                              ▼
+                     ┌──────────────────┐
+                     │ ESP32 3V3 Pin    │──────► [ INA226 VCC (Logic Power) ]
+                     │ ESP32 GND Pin    │──────► [ INA226 GND (Logic Ground) ]
+                     │ ESP32 GPIO 21    │◄─────► [ INA226 SDA (3.3V I2C Data) ]
+                     │ ESP32 GPIO 22    │──────► [ INA226 SCL (3.3V I2C Clock) ]
+                     └──────────────────┘
 ```
 
-* **INA226**: Connected via I2C (`GPIO 21 SDA`, `GPIO 22 SCL`) on the 3.3V rail. Reads continuous high-precision battery mV, charge/discharge mA, and power.
 * **XW228DKFR4**: Passive battery indicator board wired in parallel across the battery through a **momentary tactile push button**. Pressing the button lights up the 4 LED segments without consuming power during standby.
 
 ---
