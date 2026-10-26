@@ -119,6 +119,7 @@ public:
         _devices[idx].isPausable = isPausable;
         _devices[idx].isOnline = true;
         _devices[idx].lastSeenMillis = millis();
+        saveDevicesToNvs();
         return true;
     }
 
@@ -370,6 +371,20 @@ private:
             uint8_t p = prefs.getUChar("preset", (uint8_t)PRESET_1300W);
             float customW = prefs.getFloat("maxWatts", 1300.0f);
             uint8_t buf = prefs.getUChar("bufferPct", 10);
+            
+            // Restore registered appliances across reboots / OTA
+            uint8_t count = prefs.getUChar("dev_count", 0);
+            if (count > MAX_REGISTERED_DEVICES) count = MAX_REGISTERED_DEVICES;
+            _deviceCount = count;
+            if (_deviceCount > 0) {
+                prefs.getBytes("devices", _devices, _deviceCount * sizeof(RegisteredAppliance));
+                // Reset volatile runtime flags on boot
+                for (uint8_t i = 0; i < _deviceCount; i++) {
+                    _devices[i].isOnline = false;
+                    _devices[i].hasActivePermit = false;
+                    _devices[i].lastSeenMillis = 0;
+                }
+            }
             prefs.end();
 
             setProfilePreset((PowerProfilePreset)p, customW);
@@ -383,6 +398,17 @@ private:
             prefs.putUChar("preset", (uint8_t)_profile.preset);
             prefs.putFloat("maxWatts", _profile.maxWatts);
             prefs.putUChar("bufferPct", _profile.thermalBufferPct);
+            prefs.end();
+        }
+    }
+
+    void saveDevicesToNvs() {
+        Preferences prefs;
+        if (prefs.begin("power_arb", false)) {
+            prefs.putUChar("dev_count", _deviceCount);
+            if (_deviceCount > 0) {
+                prefs.putBytes("devices", _devices, _deviceCount * sizeof(RegisteredAppliance));
+            }
             prefs.end();
         }
     }
