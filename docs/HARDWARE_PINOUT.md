@@ -20,6 +20,8 @@ This assignment avoids all ESP32 strapping pins (GPIO 0, 2, 12, 15) and Wi-Fi AD
 | | `Buzzer Alarm (Optional)` | **GPIO 27** (or **-1**) | Output | 3.3V | **100% Optional**. Breaker alerts broadcast over Web/API. Set to -1 if omitted. |
 | **Auxiliary Relays** | `Shed Relay 1 (Optional)` | **GPIO 4** | Output | 3.3V | Local contactor / relay output (Optional) |
 | | `Shed Relay 2 (Optional)` | **GPIO 14** | Output | 3.3V | Local contactor / relay output (Optional) |
+| **Power & Stability** | `Reset / Enable (EN)` | **EN Pin** | Input | 3.3V | 10kΩ pull-up to 3.3V + 10µF cap to GND (100ms POR delay) |
+| | `5V / VIN Rail` | **5V Pin** | Power In | 5.0V | 220µF low-ESR bulk reservoir capacitor across 5V & GND |
 
 ---
 
@@ -71,14 +73,22 @@ The INA226 module has **two completely separate circuits**:
                      │ 5V Boost Module  │ (Steps 3.7V Li-ion to 5.0V)
                      └────────┬─────────┘
                               │ 5V Rail
-                              ▼
-                     ┌──────────────────┐
+                              ├───────────────┐
+                              │               │ (+)
+                              │              ───
+                              │             │   │ [ 220 µF Bulk Cap ]
+                              │              ───
+                              │               │ (-)
+                              ▼               ▼
+                     ┌──────────────────┐    GND
                      │ ESP32 5V/VIN Pin │
                      └────────┬─────────┘
                               │ Internal 3.3V LDO
                               ▼
                      ┌──────────────────┐
-                     │ ESP32 3V3 Pin    │──────► [ INA226 VCC (Logic Power) ]
+                     │ ESP32 3V3 Pin    │───┬──► [ INA226 VCC (Logic Power) ]
+                     │                  │   └───[ 10 kΩ Resistor ]──┐
+                     │ ESP32 EN Pin     │◄──────────────────────────┼──[ 10 µF Cap ]──► GND
                      │ ESP32 GND Pin    │──────► [ INA226 GND (Logic Ground) ]
                      │ ESP32 GPIO 21    │◄─────► [ INA226 SDA (3.3V I2C Data) ]
                      │ ESP32 GPIO 22    │──────► [ INA226 SCL (3.3V I2C Clock) ]
