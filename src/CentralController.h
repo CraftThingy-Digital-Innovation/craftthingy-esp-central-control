@@ -77,11 +77,31 @@ public:
         static uint32_t lastSerialHeartbeatMs = 0;
         if (millis() - lastSerialHeartbeatMs >= 5000) {
             lastSerialHeartbeatMs = millis();
-            Serial.printf("[STATUS] AC: %.1fV %.2fA %.1fW (pzem: %s) | DC: %.2fV %.2fA %.1fW (ina: %s, SOC:%d%%) | MCB: %u%% | Permits: %d | Heap: %u B\n",
+
+            // Periodic SD mount retry if card was inserted after boot
+            if (!_sd.isMounted()) {
+                if (_sd.retryMount()) {
+                    Serial.println(F("[SD] -> MicroSD Card detected & MOUNTED successfully (FAT32)!"));
+                }
+            }
+
+            String wifiModeStr = "OFF";
+            String ipStr = "0.0.0.0";
+            if (WiFi.status() == WL_CONNECTED) {
+                wifiModeStr = "STA (" + WiFi.SSID() + ")";
+                ipStr = WiFi.localIP().toString();
+            } else if (WiFi.getMode() & WIFI_AP) {
+                wifiModeStr = "AP (" + WiFiManager::getApSSID() + ")";
+                ipStr = WiFi.softAPIP().toString();
+            } else {
+                wifiModeStr = "CONNECTING";
+            }
+
+            Serial.printf("[STATUS] AC: %.1fV %.2fA %.1fW (pzem:%s) | DC: %.2fV %.2fA %.1fW (ina:%s) | SD:%s | WiFi:%s [%s] | Heap:%u B\n",
                           ac.voltage, ac.current, ac.power, ac.isOnline ? "ONLINE" : "WAITING_220V",
-                          dc.busVoltageV, dc.shuntCurrentMa / 1000.0f, dc.powerMw / 1000.0f, dc.isOnline ? "ONLINE" : "OFFLINE", dc.batterySocPct,
-                          _arbiter.getMcb().getThermalHeatPct(),
-                          _arbiter.getActivePermitCount(),
+                          dc.busVoltageV, dc.shuntCurrentMa / 1000.0f, dc.powerMw / 1000.0f, dc.isOnline ? "ONLINE" : "OFFLINE",
+                          _sd.isMounted() ? "MOUNTED" : "NO_CARD",
+                          wifiModeStr.c_str(), ipStr.c_str(),
                           ESP.getFreeHeap());
         }
 

@@ -27,7 +27,14 @@ public:
 
         SPI.begin(PIN_SD_SCK, PIN_SD_MISO, PIN_SD_MOSI, PIN_SD_CS);
 
-        if (!SD.begin(PIN_SD_CS, SPI, 20000000)) { // 20 MHz SPI speed
+        // Try mounting at standard 4 MHz (reliable over jumper wires)
+        bool mounted = SD.begin(PIN_SD_CS, SPI, 4000000);
+        if (!mounted) {
+            // Safe fallback at 1 MHz
+            mounted = SD.begin(PIN_SD_CS, SPI, 1000000);
+        }
+
+        if (!mounted) {
             _status.isMounted = false;
             _status.writeErrors++;
             return false;
@@ -48,6 +55,15 @@ public:
         if (!SD.exists("/data")) SD.mkdir("/data");
 
         return true;
+    }
+
+    bool retryMount() {
+        if (_status.isMounted) return true;
+        return begin();
+    }
+
+    bool isMounted() const {
+        return _status.isMounted;
     }
 
     /**
