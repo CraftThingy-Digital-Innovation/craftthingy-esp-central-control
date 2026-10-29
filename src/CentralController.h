@@ -36,11 +36,28 @@ public:
             digitalWrite(PIN_BUZZER_ALARM, LOW);
         }
 
+        Serial.println(F("[INIT] Initializing Central Control subsystems..."));
+
         // Initialize subsystems
         _pzem.begin();
-        _ina226.begin(INA226_I2C_ADDR, 0.01f);
-        _sd.begin();
+        Serial.printf("[INIT] PZEM-004T AC Sensor (RX:%d, TX:%d): Modbus-RTU 9600 baud initialized\n", PIN_PZEM_RX, PIN_PZEM_TX);
+
+        bool inaOk = _ina226.begin(INA226_I2C_ADDR, 0.01f);
+        Serial.printf("[INIT] INA226 DC Sensor (I2C 0x%02X, SDA:%d, SCL:%d): %s\n", 
+                      INA226_I2C_ADDR, PIN_I2C_SDA, PIN_I2C_SCL, 
+                      inaOk ? "ONLINE (Ready)" : "NOT DETECTED (Offline)");
+
+        bool sdOk = _sd.begin();
+        Serial.printf("[INIT] 8GB MicroSD Logger (CS:%d, MOSI:%d, MISO:%d, SCK:%d): %s\n", 
+                      PIN_SD_CS, PIN_SD_MOSI, PIN_SD_MISO, PIN_SD_SCK, 
+                      sdOk ? "MOUNTED (FAT32)" : "NO CARD / UNMOUNTED");
+
         _arbiter.begin();
+        Serial.printf("[INIT] 1300W Energy Arbiter: ACTIVE (Ceiling: %.0fW, Nominal Breaker: %.0fW, Cushion: %d%%)\n",
+                      _arbiter.getProfile().effectiveCeilingWatts,
+                      _arbiter.getProfile().maxWatts,
+                      _arbiter.getProfile().thermalBufferPct);
+        Serial.println(F("[INIT] System ready. Commencing 1Hz energy monitoring & load arbitration."));
     }
 
     void loop() override {
@@ -55,6 +72,18 @@ public:
         const PzemTelemetry& ac = _pzem.getTelemetry();
         const DcTelemetry& dc = _ina226.getTelemetry();
         _sd.logSample(ac, dc, _arbiter.getActivePermitCount(), _arbiter.getProfile().effectiveCeilingWatts);
+
+        // Periodic Serial telemetry heartbeat (every 5 seconds)
+        static uint32_t lastSerialHeartbeatMs = 0;
+        if (millis() - lastSerialHeartbeatMs >= 5000) {
+            lastSerialHeartbeatMs = millis();
+            Serial.printf("[STATUS] AC: %.1fV %.2fA %.1fW (pzem: %s) | DC: %.2fV %.2fA %.1fW (ina: %s, SOC:%d%%) | MCB: %u%% | Permits: %d | Heap: %u B\n",
+                          ac.voltage, ac.current, ac.power, ac.isOnline ? "ONLINE" : "WAITING_220V",
+                          dc.busVoltageV, dc.shuntCurrentMa / 1000.0f, dc.powerMw / 1000.0f, dc.isOnline ? "ONLINE" : "OFFLINE", dc.batterySocPct,
+                          _arbiter.getMcb().getThermalHeatPct(),
+                          _arbiter.getActivePermitCount(),
+                          ESP.getFreeHeap());
+        }
 
         // Optional Physical 60-Second Pairing Button Monitor (if wired)
         if (PIN_BUTTON_PAIR >= 0 && digitalRead(PIN_BUTTON_PAIR) == LOW) {
