@@ -10,6 +10,10 @@ This assignment avoids all ESP32 strapping pins (GPIO 0, 2, 12, 15) and Wi-Fi AD
 | | `ESP32 TX2` $\rightarrow$ PZEM RX | **GPIO 17** | Output | 3.3V Native | Hardware UART2 |
 | **INA226 DC Sensor** | `I2C SDA` | **GPIO 21** | Bidirectional | 3.3V | I2C Data (4.7kΩ pull-up on breakout) |
 | | `I2C SCL` | **GPIO 22** | Output | 3.3V | I2C Clock (4.7kΩ pull-up on breakout) |
+| | `VCC / GND` | **3V3 / GND** | Power / Ground | 3.3V | Sensor chip logic supply from ESP32 3V3 |
+| | `VBUS` | **Bridge to IN+** | Input | 0 - 36V | **Bus Voltage Sensing**: Wire jumper directly to `IN+` (Battery +) |
+| | `IN+ (Vin+)` | **Battery (+)** | Analog Sense | 3.7V - 4.2V | Shunt Resistor (+) side (Battery positive terminal) |
+| | `IN- (Vin-)` | **Booster In (+)** | Analog Sense | 3.7V - 4.2V | Shunt Resistor (-) side (5V Boost input) |
 | | `ALERT` | **GPIO 35** | Input | 3.3V | Optional over-current / voltage alert interrupt |
 | **MicroSD Module** | `VSPI SCK` | **GPIO 18** | Output | 3.3V | Hardware SPI Clock |
 | | `VSPI MISO` | **GPIO 19** | Input | 3.3V | Hardware SPI Master In |
@@ -58,14 +62,21 @@ The INA226 module has **two completely separate circuits**:
                               │                               │
                               ▼                               ▼
                      ┌──────────────────┐           ┌──────────────────┐
-                     │  INA226 IN+      │           │ Momentary Button │
-                     │  & VBUS (Sense)  │           └─────────┬────────┘
+                     │    INA226 IN+    │           │ Momentary Button │
+                     │   (Shunt High)   │           └─────────┬────────┘
                      └────────┬─────────┘                     │
-                              │ (Current Shunt)               ▼
-                              ▼                      [ XW228DKFR4 (+) ]
-                     ┌──────────────────┐                     │
-                     │  INA226 IN-      │            [ XW228DKFR4 (-) ]
-                     │  (Load Side)     │                     │
+                              ├─── Wire Jumper ───┐           ▼
+                              │ (Battery Voltage) │  [ XW228DKFR4 (+) ]
+                              │                   ▼           │
+                              │          ┌────────────────┐   │
+                              │          │  INA226 VBUS   │   │
+                              │          │ (Voltage Sense)│   │
+                              │          └────────────────┘   │
+                              │ (Current Shunt)               │
+                              ▼                               ▼
+                     ┌──────────────────┐            [ XW228DKFR4 (-) ]
+                     │    INA226 IN-    │                     │
+                     │   (Shunt Low)    │                     │
                      └────────┬─────────┘                     │
                               │                               ▼
                               ▼                            [ GND ]
