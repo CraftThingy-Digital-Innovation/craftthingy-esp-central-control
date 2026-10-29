@@ -100,3 +100,49 @@ The INA226 module has **two completely separate circuits**:
  GPIO 23 (MOSI) ──────────────────────────────────► MOSI / DI
   GPIO 5 (CS) ────────────────────────────────────► CS / SS
 ```
+
+---
+
+## 5. Power Supply & Reset (EN) Hardware Stabilization
+
+To guarantee 24/7 industrial-grade reliability near noisy inductive electrical panels and water pumps, the following passive stabilization networks are implemented:
+
+### A. Chip Enable / Reset (EN) Power-On RC Delay ($10\text{k}\Omega + 10\mu\text{F}$)
+
+When power is first applied, battery boost converters and grid supplies ramp up with a slight voltage slew rate. Without an RC delay, the ESP32 can exit reset before the internal 3.3V rail, clock crystal, and SPI flash memory stabilize, causing random boot crashes or flashing failures.
+
+```
+       3.3V Rail
+           │
+           ├───[ 10 kΩ Resistor ]───┐
+                                    │
+                                    ├───► [ ESP32 EN / CHIP_PU Pin ]
+                                    │
+           ├───[ 10 µF Capacitor ]──┘
+           │     (Positive +)
+          GND
+```
+
+* **RC Time Constant ($\tau$)**:
+  $$\tau = R \times C = 10\,\text{k}\Omega \times 10\,\mu\text{F} = \mathbf{100\,\text{ms}}$$
+* **Effect**: Holds the ESP32 `EN` pin LOW for ~100ms during initial power ramp-up, ensuring the 3.3V rail is 100% stable before the Xtensa dual-core CPU boots. Eliminates power-on lockups and flashing errors.
+
+---
+
+### B. 5V Rail Bulk Reservoir Capacitor ($220\mu\text{F}$)
+
+The ESP32 Wi-Fi radio draws rapid, high-amplitude current pulses during RF transmission bursts (up to $450\text{mA} - 500\text{mA}$ lasting several milliseconds).
+
+```
+ [ 5V Boost Output ] ──────────┬──────────────────────────► [ ESP32 5V / VIN Pin ]
+                               │
+                              ─── +
+                             │   │  [ 220 µF Bulk Electrolytic / Low-ESR ]
+                              ─── -
+                               │
+ [ Common Ground ]   ──────────┴──────────────────────────► [ ESP32 GND Pin ]
+```
+
+* **Effect**: The $220\mu\text{F}$ capacitor acts as an immediate local energy reservoir directly at the input of the ESP32's onboard 3.3V Low-Dropout (LDO) regulator.
+* **Result**: Prevents the 5V booster from sagging under sudden Wi-Fi transmit load steps, completely eliminating `Brownout detector was triggered` reboot loops.
+
