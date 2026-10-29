@@ -121,6 +121,9 @@ public:
 
         // Alarm Buzzer & Status LED logic (safely skipped if pins are -1)
         handleSurgeAlarm();
+
+        // Process Serial USB provisioning commands (e.g. WIFI:SSID,PASSWORD)
+        handleSerialCommands();
     }
 
     const char* getRoleName() const override {
@@ -366,5 +369,64 @@ private:
             end++;
         }
         return json.substring(start, end);
+    }
+
+    void handleSerialCommands() {
+        if (!Serial.available()) return;
+        String line = Serial.readStringUntil('\n');
+        line.trim();
+        if (line.length() == 0) return;
+
+        if (line.startsWith("WIFI:") || line.startsWith("wifi:")) {
+            String payload = line.substring(5);
+            int commaIdx = payload.indexOf(',');
+            if (commaIdx < 0) commaIdx = payload.indexOf(':');
+
+            if (commaIdx > 0) {
+                String ssid = payload.substring(0, commaIdx);
+                String pass = payload.substring(commaIdx + 1);
+                ssid.trim();
+                pass.trim();
+
+                Serial.printf("\n[PROVISION] Storing Wi-Fi credentials for SSID: '%s'...\n", ssid.c_str());
+                ConfigStore::setWiFiConfig(ssid, pass);
+                Serial.println(F("[PROVISION] Saved to NVS! Connecting to Wi-Fi now..."));
+                WiFiManager::connectSTA(ssid.c_str(), pass.c_str(), 10);
+            } else {
+                Serial.println(F("\n[PROVISION] Format error! Use: WIFI:SSID,PASSWORD"));
+            }
+        } else if (line.equalsIgnoreCase("SCAN")) {
+            Serial.println(F("\n[WIFI] Scanning nearby 2.4GHz Wi-Fi networks..."));
+            wifi_mode_t origMode = WiFi.getMode();
+            if (!(origMode & WIFI_MODE_STA)) {
+                WiFi.mode(WIFI_MODE_APSTA);
+            }
+            int n = WiFi.scanNetworks(false, false, false, 250);
+            if (n <= 0) {
+                Serial.println(F("[WIFI] No networks found or scan failed."));
+            } else {
+                for (int i = 0; i < n; i++) {
+                    Serial.printf("  [%d] %-24s (RSSI: %3d dBm, Ch: %2d, %s)\n",
+                                  i + 1, WiFi.SSID(i).c_str(), WiFi.RSSI(i), WiFi.channel(i),
+                                  WiFi.encryptionType(i) == WIFI_AUTH_OPEN ? "OPEN" : "SECURED");
+                }
+                Serial.printf("[WIFI] Scan complete: %d networks found.\n", n);
+            }
+            WiFi.scanDelete();
+            if (!(origMode & WIFI_MODE_STA) && WiFi.status() != WL_CONNECTED) {
+                WiFi.mode(origMode);
+            }
+        } else if (line.equalsIgnoreCase("STATUS") || line.equalsIgnoreCase("IP")) {
+            Serial.printf("\n[WIFI] Mode: %s | SSID: %s | IP: %s\n",
+                          WiFi.status() == WL_CONNECTED ? "STA" : "AP",
+                          WiFi.status() == WL_CONNECTED ? WiFi.SSID().c_str() : WiFiManager::getApSSID().c_str(),
+                          WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString().c_str() : WiFi.softAPIP().toString().c_str());
+        } else if (line.equalsIgnoreCase("HELP")) {
+            Serial.println(F("\n--- Central Control Serial Commands ---"));
+            Serial.println(F("  WIFI:<SSID>,<PASSWORD>  - Save credentials & connect to home Wi-Fi"));
+            Serial.println(F("  SCAN                    - Scan and list nearby Wi-Fi networks"));
+            Serial.println(F("  STATUS                  - Display IP address & current connection"));
+            Serial.println(F("--------------------------------------"));
+        }
     }
 };
