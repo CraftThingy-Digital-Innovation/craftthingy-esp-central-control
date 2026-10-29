@@ -22,10 +22,43 @@ public:
         _addr = addr;
         _shuntOhms = shuntOhms;
         Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);
+        Wire.setClock(100000); // Standard 100 kHz I2C speed
 
-        // Verify communication by reading Manufacturer ID (Reg 0xFE = 0x5449)
+        // Diagnostic I2C bus scan
+        Serial.printf("[I2C] Scanning I2C bus on SDA:GPIO%d, SCL:GPIO%d...\n", PIN_I2C_SDA, PIN_I2C_SCL);
+        uint8_t foundCount = 0;
+        uint8_t detectedAddr = 0;
+        for (uint8_t a = 1; a < 127; a++) {
+            Wire.beginTransmission(a);
+            uint8_t err = Wire.endTransmission(true);
+            if (err == 0) {
+                Serial.printf("[I2C] -> Device ACK at address 0x%02X!\n", a);
+                foundCount++;
+                if (a >= 0x40 && a <= 0x4F) {
+                    detectedAddr = a;
+                }
+            }
+        }
+
+        if (foundCount == 0) {
+            Serial.println(F("[I2C] -> WARNING: 0 I2C devices responded! Check SDA (GPIO 21) & SCL (GPIO 22) wiring."));
+            _telemetry.isOnline = false;
+            return false;
+        }
+
+        if (detectedAddr != 0) {
+            _addr = detectedAddr;
+            Serial.printf("[I2C] -> Using INA226 address 0x%02X\n", _addr);
+        }
+
+        // Verify communication by reading Manufacturer ID (0xFE) and Die ID (0xFF)
         uint16_t mfgId = readRegister(0xFE);
-        if (mfgId != 0x5449) {
+        uint16_t dieId = readRegister(0xFF);
+        Serial.printf("[I2C] -> Read Reg 0xFE (Mfg ID): 0x%04X, Reg 0xFF (Die ID): 0x%04X\n", mfgId, dieId);
+
+        // TI INA226 Mfg ID is 0x5449 ("TI"), Die ID is 0x2260
+        if (mfgId != 0x5449 && dieId != 0x2260 && mfgId == 0xFFFF) {
+            Serial.println(F("[I2C] -> INA226 ID mismatch / unreadable register"));
             _telemetry.isOnline = false;
             return false;
         }
@@ -116,8 +149,15 @@ private:
     uint16_t readRegister(uint8_t reg) {
         Wire.beginTransmission(_addr);
         Wire.write(reg);
-        if (Wire.endTransmission(false) != 0) {
-            return 0xFFFF;
+        uint8_t err = Wire.endTransmission(false);
+        if (err != 0) {
+            // Retry with STOP bit if repeated start was NACKed
+            Wire.beginTransmission(_addr);
+            Wire.write(reg);
+            err = Wire.endTransmission(true);
+            if (err != 0) {
+                return 0xFFFF;
+            }
         }
 
         if (Wire.requestFrom(_addr, (uint8_t)2) != 2) {
