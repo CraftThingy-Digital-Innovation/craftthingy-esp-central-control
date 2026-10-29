@@ -8,8 +8,8 @@ This assignment avoids all ESP32 strapping pins (GPIO 0, 2, 12, 15) and Wi-Fi AD
 |---|---|---|---|---|---|
 | **PZEM-004T v3/v4** | `ESP32 RX2` $\leftarrow$ PZEM TX | **GPIO 16** | Input | 3.3V Native | Hardware UART2. Native 3.3V with 3.3V PZEM logic jumper |
 | | `ESP32 TX2` $\rightarrow$ PZEM RX | **GPIO 17** | Output | 3.3V Native | Hardware UART2 |
-| **INA226 DC Sensor** | `I2C SDA` | **GPIO 21** | Bidirectional | 3.3V | I2C Data (4.7kΩ pull-up on breakout) |
-| | `I2C SCL` | **GPIO 22** | Output | 3.3V | I2C Clock (4.7kΩ pull-up on breakout) |
+| **INA226 DC Sensor** | `I2C SDA` | **GPIO 21** | Bidirectional | 3.3V | I2C Data (Auto-detected address: 0x44 on this module) |
+| | `I2C SCL` | **GPIO 22** | Output | 3.3V | I2C Clock (Standard 100 kHz) |
 | | `VCC / GND` | **3V3 / GND** | Power / Ground | 3.3V | Sensor chip logic supply from ESP32 3V3 |
 | | `VBUS` | **Bridge to IN+** | Input | 0 - 36V | **Bus Voltage Sensing**: Wire jumper directly to `IN+` (Battery +) |
 | | `IN+ (Vin+)` | **Battery (+)** | Analog Sense | 3.7V - 4.2V | Shunt Resistor (+) side (Battery positive terminal) |
