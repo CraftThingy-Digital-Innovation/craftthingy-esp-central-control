@@ -99,7 +99,7 @@ The INA226 module has **two completely separate circuits**:
                      ┌──────────────────┐
                      │ ESP32 3V3 Pin    │───┬──► [ INA226 VCC (Logic Power) ]
                      │                  │   └───[ 10 kΩ Resistor ]──┐
-                     │ ESP32 EN Pin     │◄──────────────────────────┼──[ 10 µF Cap ]──► GND
+                     │ ESP32 EN Pin     │◄──────────────────────────┼──(+) [ 10 µF ] (-)──► GND
                      │ ESP32 GND Pin    │──────► [ INA226 GND (Logic Ground) ]
                      │ ESP32 GPIO 21    │◄─────► [ INA226 SDA (3.3V I2C Data) ]
                      │ ESP32 GPIO 22    │──────► [ INA226 SCL (3.3V I2C Clock) ]
@@ -139,14 +139,20 @@ When power is first applied, battery boost converters and grid supplies ramp up 
                                     │
                                     ├───► [ ESP32 EN / CHIP_PU Pin ]
                                     │
-           ├───[ 10 µF Capacitor ]──┘
-           │     (Positive +)
-          GND
+                                   ─── (+) [ Positive lead to EN ]
+                                  │   │    [ 10 µF Electrolytic / Tantalum ]
+                                   ─── (-) [ Negative lead (white stripe) to GND ]
+                                    │
+                                   GND
 ```
 
 * **RC Time Constant ($\tau$)**:
   $$\tau = R \times C = 10\,\text{k}\Omega \times 10\,\mu\text{F} = \mathbf{100\,\text{ms}}$$
 * **Effect**: Holds the ESP32 `EN` pin LOW for ~100ms during initial power ramp-up, ensuring the 3.3V rail is 100% stable before the Xtensa dual-core CPU boots. Eliminates power-on lockups and flashing errors.
+* **⚠️ Polarity Rule (Electrolytic / Tantalum)**:
+  * **Negative (-) lead (marked with the white stripe / minus sign)** connects strictly to **GND**.
+  * **Positive (+) lead (longer leg)** connects to the **ESP32 EN Pin**.
+  * *(If using a ceramic capacitor such as 0805 or 1206 MLCC, it is non-polarized and can be installed in either orientation).*
 
 ---
 
