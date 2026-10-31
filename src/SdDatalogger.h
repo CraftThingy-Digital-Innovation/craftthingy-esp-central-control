@@ -53,6 +53,7 @@ public:
         // Ensure directory structure exists
         if (!SD.exists("/logs")) SD.mkdir("/logs");
         if (!SD.exists("/data")) SD.mkdir("/data");
+        if (!SD.exists("/www"))  SD.mkdir("/www");
 
         return true;
     }

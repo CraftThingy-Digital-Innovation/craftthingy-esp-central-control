@@ -325,6 +325,94 @@ public:
         if (PIN_LED_STATUS >= 0) digitalWrite(PIN_LED_STATUS, HIGH);
     }
 
+    bool handleHttpRequest(ApiServerType& server, const String& uri, const String& method) override {
+        if (!_sd.isMounted()) return false;
+
+        // 1. SD File Upload / Write endpoint
+        if (uri == "/api/v1/sd/write" && method == "POST") {
+            String path = server.hasArg("path") ? server.arg("path") : "";
+            if (path.length() == 0) {
+                server.send(400, "application/json", "{\"status\":\"error\",\"message\":\"Missing path parameter\"}");
+                return true;
+            }
+            if (!path.startsWith("/")) path = "/" + path;
+            if (path.indexOf("..") >= 0) {
+                server.send(400, "application/json", "{\"status\":\"error\",\"message\":\"Invalid path traversal\"}");
+                return true;
+            }
+
+            String content = server.hasArg("content") ? server.arg("content") : (server.hasArg("plain") ? server.arg("plain") : "");
+            ensureParentDir(path);
+
+            File f = SD.open(path, FILE_WRITE);
+            if (!f) {
+                server.send(500, "application/json", "{\"status\":\"error\",\"message\":\"Failed to open file for writing\"}");
+                return true;
+            }
+            size_t written = f.print(content);
+            f.flush();
+            f.close();
+
+            char res[160];
+            snprintf(res, sizeof(res), "{\"status\":\"success\",\"path\":\"%s\",\"bytes\":%u}", path.c_str(), (unsigned int)written);
+            server.send(200, "application/json", res);
+            return true;
+        }
+
+        // 2. SD File List endpoint
+        if (uri == "/api/v1/sd/list" && method == "GET") {
+            String dirPath = server.hasArg("dir") ? server.arg("dir") : "/www";
+            if (!dirPath.startsWith("/")) dirPath = "/" + dirPath;
+            File root = SD.open(dirPath);
+            if (!root || !root.isDirectory()) {
+                if (root) root.close();
+                server.send(404, "application/json", "{\"status\":\"error\",\"message\":\"Directory not found\"}");
+                return true;
+            }
+
+            String json = "{\"status\":\"success\",\"dir\":\"" + dirPath + "\",\"files\":[";
+            File file = root.openNextFile();
+            bool first = true;
+            while (file) {
+                if (!first) json += ",";
+                first = false;
+                json += "{\"name\":\"" + String(file.name()) + "\",\"isDir\":" + (file.isDirectory() ? "true" : "false") + ",\"size\":" + String(file.size()) + "}";
+                file = root.openNextFile();
+            }
+            root.close();
+            json += "]}";
+            server.send(200, "application/json", json);
+            return true;
+        }
+
+        // 3. SD File Download endpoint
+        if (uri == "/api/v1/sd/download" && method == "GET") {
+            String path = server.hasArg("path") ? server.arg("path") : "";
+            if (path.length() > 0 && serveSdFile(server, path, true)) {
+                return true;
+            }
+            server.send(404, "application/json", "{\"status\":\"error\",\"message\":\"File not found\"}");
+            return true;
+        }
+
+        // 4. Root portal (/ or /index.html) -> Checks /www/index.html first, then /index.html
+        if (uri == "/" || uri == "/index.html") {
+            if (serveSdFile(server, "/www/index.html") || serveSdFile(server, "/index.html")) {
+                return true;
+            }
+            return false;
+        }
+
+        // 5. Static file request from SD (/www/* or root-relative)
+        if (method == "GET") {
+            if (serveSdFile(server, uri)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     PzemReader&   getPzem()    { return _pzem; }
     Ina226Reader& getIna226()  { return _ina226; }
     SdDatalogger& getSd()      { return _sd; }
@@ -370,6 +458,65 @@ private:
             end++;
         }
         return json.substring(start, end);
+    }
+
+    static String getMimeType(const String& path) {
+        if (path.endsWith(".html") || path.endsWith(".htm")) return "text/html; charset=utf-8";
+        if (path.endsWith(".css")) return "text/css; charset=utf-8";
+        if (path.endsWith(".js")) return "application/javascript; charset=utf-8";
+        if (path.endsWith(".json")) return "application/json";
+        if (path.endsWith(".png")) return "image/png";
+        if (path.endsWith(".jpg") || path.endsWith(".jpeg")) return "image/jpeg";
+        if (path.endsWith(".gif")) return "image/gif";
+        if (path.endsWith(".ico")) return "image/x-icon";
+        if (path.endsWith(".svg")) return "image/svg+xml";
+        if (path.endsWith(".csv")) return "text/csv; charset=utf-8";
+        if (path.endsWith(".txt")) return "text/plain; charset=utf-8";
+        return "application/octet-stream";
+    }
+
+    bool serveSdFile(ApiServerType& server, const String& path, bool asAttachment = false) {
+        if (!_sd.isMounted()) return false;
+        if (path.indexOf("..") >= 0) return false;
+
+        String fullPath = path;
+        if (!SD.exists(fullPath)) {
+            if (!fullPath.startsWith("/www")) {
+                fullPath = "/www" + (fullPath.startsWith("/") ? fullPath : ("/" + fullPath));
+            }
+        }
+
+        if (!SD.exists(fullPath)) return false;
+
+        File f = SD.open(fullPath, FILE_READ);
+        if (!f || f.isDirectory()) {
+            if (f) f.close();
+            return false;
+        }
+
+        server.sendHeader("Access-Control-Allow-Origin", "*");
+        if (asAttachment) {
+            int lastSlash = fullPath.lastIndexOf('/');
+            String filename = (lastSlash >= 0) ? fullPath.substring(lastSlash + 1) : fullPath;
+            server.sendHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
+        } else {
+            server.sendHeader("Cache-Control", "no-cache");
+        }
+
+        String mime = getMimeType(fullPath);
+        server.streamFile(f, mime);
+        f.close();
+        return true;
+    }
+
+    void ensureParentDir(const String& path) {
+        int lastSlash = path.lastIndexOf('/');
+        if (lastSlash > 0) {
+            String dir = path.substring(0, lastSlash);
+            if (!SD.exists(dir)) {
+                SD.mkdir(dir);
+            }
+        }
     }
 
     void handleSerialCommands() {
