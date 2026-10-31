@@ -83,12 +83,12 @@ public:
         }
         _lastPollMs = millis();
 
-        // Reg 0x02: Bus Voltage (1.25 mV per LSB, full range up to 36V)
-        int16_t rawBus = (int16_t)readRegister(0x02);
-        // Reg 0x01: Shunt Voltage (2.5 uV per LSB)
+        // Reg 0x02: Bus Voltage (1.25 mV per LSB, full range up to 36V, unsigned 15-bit)
+        uint16_t rawBus = readRegister(0x02);
+        // Reg 0x01: Shunt Voltage (2.5 uV per LSB, signed 16-bit two's complement)
         int16_t rawShunt = (int16_t)readRegister(0x01);
 
-        if (rawBus == -1 && rawShunt == -1) {
+        if (rawBus == 0xFFFF && (uint16_t)rawShunt == 0xFFFF) {
             _consecutiveErrors++;
             if (_consecutiveErrors > 3) {
                 _telemetry.isOnline = false;
@@ -96,11 +96,13 @@ public:
             return false;
         }
 
-        _telemetry.busVoltageV = (float)rawBus * 0.00125f;
-
-        // Current = Vshunt (uV) / Rshunt (ohms) -> mA
-        float shuntUv = (float)rawShunt * 2.5f;
-        _telemetry.shuntCurrentMa = (shuntUv / _shuntOhms) * 0.001f;
+        if (rawBus != 0xFFFF) {
+            _telemetry.busVoltageV = (float)rawBus * 0.00125f;
+        }
+        if ((uint16_t)rawShunt != 0xFFFF) {
+            float shuntUv = (float)rawShunt * 2.5f;
+            _telemetry.shuntCurrentMa = (shuntUv / _shuntOhms) * 0.001f;
+        }
 
         // Power in mW
         _telemetry.powerMw = _telemetry.busVoltageV * _telemetry.shuntCurrentMa;
@@ -149,18 +151,12 @@ private:
     uint16_t readRegister(uint8_t reg) {
         Wire.beginTransmission(_addr);
         Wire.write(reg);
-        uint8_t err = Wire.endTransmission(false);
+        uint8_t err = Wire.endTransmission(true); // Standard STOP (reliable on ESP32 & INA226)
         if (err != 0) {
-            // Retry with STOP bit if repeated start was NACKed
-            Wire.beginTransmission(_addr);
-            Wire.write(reg);
-            err = Wire.endTransmission(true);
-            if (err != 0) {
-                return 0xFFFF;
-            }
+            return 0xFFFF;
         }
 
-        if (Wire.requestFrom(_addr, (uint8_t)2) != 2) {
+        if (Wire.requestFrom((int)_addr, 2, (int)true) != 2) {
             return 0xFFFF;
         }
 
@@ -174,6 +170,6 @@ private:
         Wire.write(reg);
         Wire.write((uint8_t)((value >> 8) & 0xFF));
         Wire.write((uint8_t)(value & 0xFF));
-        Wire.endTransmission();
+        Wire.endTransmission(true);
     }
 };

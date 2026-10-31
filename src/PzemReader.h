@@ -40,20 +40,38 @@ public:
         }
 
         // Modbus-RTU Read Input Registers (0x04) starting at 0x0000 for 10 registers
+        // Try slave address 0x01 first, fallback to general broadcast 0xF8
         uint8_t cmd[8] = { 0x01, 0x04, 0x00, 0x00, 0x00, 0x0A, 0x70, 0x0D };
         Serial2.write(cmd, 8);
         Serial2.flush();
 
-        // Wait up to 150ms for 25-byte response
+        // Wait up to 200ms for 25-byte response
         uint8_t response[25];
         uint8_t received = 0;
         uint32_t startMs = millis();
 
-        while ((millis() - startMs < 150) && (received < 25)) {
+        while ((millis() - startMs < 200) && (received < 25)) {
             if (Serial2.available()) {
                 response[received++] = Serial2.read();
             } else {
-                delay(1);
+                delay(2);
+            }
+        }
+
+        // If no response on 0x01, try general broadcast address 0xF8
+        if (received < 25) {
+            while (Serial2.available()) Serial2.read();
+            uint8_t cmdF8[8] = { 0xF8, 0x04, 0x00, 0x00, 0x00, 0x0A, 0x64, 0x64 };
+            Serial2.write(cmdF8, 8);
+            Serial2.flush();
+            received = 0;
+            startMs = millis();
+            while ((millis() - startMs < 200) && (received < 25)) {
+                if (Serial2.available()) {
+                    response[received++] = Serial2.read();
+                } else {
+                    delay(2);
+                }
             }
         }
 
@@ -62,8 +80,8 @@ public:
             return false;
         }
 
-        // Validate Modbus header
-        if (response[0] != 0x01 || response[1] != 0x04 || response[2] != 0x14) {
+        // Validate Modbus header (accepts address 0x01 or 0xF8)
+        if ((response[0] != 0x01 && response[0] != 0xF8) || response[1] != 0x04 || response[2] != 0x14) {
             handleError();
             return false;
         }
