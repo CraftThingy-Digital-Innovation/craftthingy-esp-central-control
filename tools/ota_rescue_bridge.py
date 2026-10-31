@@ -396,6 +396,29 @@ def https_server_thread(
                             "browser_download_url": "https://api.github.com/download/firmware.bin"
                         }
                     ]
+                elif target == "central_control":
+                    assets = [
+                        {
+                            "name": "firmware-central_control-esp32.bin",
+                            "size": bin_size,
+                            "browser_download_url": "https://api.github.com/download/firmware-central_control-esp32.bin"
+                        },
+                        {
+                            "name": "firmware-central_control-esp01s.bin",
+                            "size": bin_size,
+                            "browser_download_url": "https://api.github.com/download/firmware-central_control-esp01s.bin"
+                        },
+                        {
+                            "name": "firmware-esp32.bin",
+                            "size": bin_size,
+                            "browser_download_url": "https://api.github.com/download/firmware-esp32.bin"
+                        },
+                        {
+                            "name": "firmware.bin",
+                            "size": bin_size,
+                            "browser_download_url": "https://api.github.com/download/firmware.bin"
+                        }
+                    ]
                 else:
                     assets = [
                         {
@@ -660,7 +683,7 @@ Examples:
     parser.add_argument("--key", default=DEFAULT_SECRET, help="Master Secret Key")
     parser.add_argument("--bin", default=None, help="Path to firmware binary (default: auto-detected from build artifacts or latest release)")
     parser.add_argument("--tag", default=None, help="Release tag to simulate or download (default: v1.1.2 for core, v1.1.7 for water_pump)")
-    parser.add_argument("--target", default=DEFAULT_TARGET, choices=["core", "water_pump"], help=f"Firmware target role (default: {DEFAULT_TARGET})")
+    parser.add_argument("--target", default=DEFAULT_TARGET, choices=["core", "water_pump", "central_control"], help=f"Firmware target role (default: {DEFAULT_TARGET})")
     parser.add_argument("--bridge-ip", default=None, help="Host IP for rescue bridge (default: auto-detected)")
     parser.add_argument("--gateway", default="192.168.2.1", help="Network Gateway (default: 192.168.2.1)")
     parser.add_argument("--wifi-ssid", default=None, help="Wi-Fi SSID to provision ESP to during AP mode rescue")
