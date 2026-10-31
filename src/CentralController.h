@@ -1,6 +1,9 @@
 #pragma once
 
 #include <Arduino.h>
+#include <WiFi.h>
+#include <ESPmDNS.h>
+#include <HTTPClient.h>
 #include <DeviceController.h>
 #include "CentralConfig.h"
 #include "HardwarePins.h"
@@ -163,13 +166,18 @@ public:
         }
 
         if (cmd == "request_permit") {
-            // Payload format: {"mac":"XX:XX:XX","watts":500,"duration":300}
-            // For simple string parsing:
+            // Payload format: {"mac":"XX:XX:XX","watts":500,"duration":300,"ip":"...","rssi":-45}
             String mac = parseField(payload, "mac");
+            String ip = parseField(payload, "ip");
+            int rssi = parseField(payload, "rssi").toInt();
             float watts = parseField(payload, "watts").toFloat();
             uint32_t dur = (uint32_t)parseField(payload, "duration").toInt();
             if (watts <= 0.0f) watts = 500.0f;
             if (dur == 0) dur = 300;
+
+            if (mac.length() > 0) {
+                _arbiter.updateHeartbeat(mac.c_str(), ip.length() > 0 ? ip.c_str() : nullptr, (int8_t)rssi);
+            }
 
             PowerPermitToken token = _arbiter.requestPermit(mac.c_str(), watts, dur, _pzem.getTelemetry());
 
@@ -194,14 +202,91 @@ public:
             String mac = parseField(payload, "mac");
             String name = parseField(payload, "name");
             String role = parseField(payload, "role");
+            String ip = parseField(payload, "ip");
             int priority = parseField(payload, "priority").toInt();
             float watts = parseField(payload, "watts").toFloat();
             bool pausable = (parseField(payload, "pausable") == "true");
 
             if (priority <= 0 || priority > 4) priority = (int)PRIORITY_NORMAL;
             _arbiter.registerOrUpdateAppliance(mac.c_str(), name.c_str(), role.c_str(), 
-                                               (AppliancePriority)priority, watts, pausable);
+                                               (AppliancePriority)priority, watts, pausable,
+                                               ip.length() > 0 ? ip.c_str() : nullptr);
             response = "{\"status\":\"success\",\"message\":\"Appliance registered\"}";
+            return true;
+        }
+
+        if (cmd == "update_priority") {
+            String mac = parseField(payload, "mac");
+            int priority = parseField(payload, "priority").toInt();
+            float watts = parseField(payload, "watts").toFloat();
+            bool pausable = (parseField(payload, "pausable") == "true");
+
+            if (priority <= 0 || priority > 4) priority = (int)PRIORITY_NORMAL;
+            bool ok = _arbiter.updateDevicePriority(mac.c_str(), (AppliancePriority)priority, watts, pausable);
+            response = ok ? "{\"status\":\"success\",\"message\":\"Priority updated\"}" : "{\"status\":\"error\",\"message\":\"Device not found\"}";
+            return ok;
+        }
+
+        if (cmd == "remove_device" || cmd == "quarantine_device") {
+            String mac = parseField(payload, "mac");
+            bool ok = _arbiter.removeDevice(mac.c_str());
+            response = ok ? "{\"status\":\"success\",\"message\":\"Device removed / quarantined\"}" : "{\"status\":\"error\",\"message\":\"Device not found\"}";
+            return ok;
+        }
+
+        if (cmd == "override_device") {
+            String mac = parseField(payload, "mac");
+            String targetIp = parseField(payload, "ip");
+            String action = parseField(payload, "action"); // "start", "stop", "auto"
+            if (action.length() == 0) action = parseField(payload, "state");
+
+            // Look up IP from registered devices if not passed
+            if (targetIp.length() == 0 && mac.length() > 0) {
+                uint8_t count = 0;
+                const RegisteredAppliance* devs = _arbiter.getDevices(count);
+                for (uint8_t i = 0; i < count; i++) {
+                    if (strcmp(devs[i].mac, mac.c_str()) == 0) {
+                        targetIp = devs[i].ip;
+                        break;
+                    }
+                }
+            }
+
+            if (targetIp.length() == 0) {
+                response = "{\"status\":\"error\",\"message\":\"No target IP found for device\"}";
+                return false;
+            }
+
+            bool isOverridden = (action == "start" || action == "on" || action == "stop" || action == "off");
+            _arbiter.setDeviceOverride(mac.c_str(), isOverridden);
+
+            // Dispatch command to satellite node
+            HTTPClient http;
+            http.begin("http://" + targetIp + "/api/v1/device/command");
+            http.addHeader("Content-Type", "application/json");
+            http.setTimeout(1500);
+
+            String body = "{\"cmd\":\"" + action + "\"}";
+            int code = http.POST(body);
+            String payloadRes = (code > 0) ? http.getString() : "Timeout";
+            http.end();
+
+            if (code <= 0 || code >= 400) {
+                // Fallback to /api/v1/pump/command if device was a pump
+                http.begin("http://" + targetIp + "/api/v1/pump/command");
+                http.addHeader("Content-Type", "application/json");
+                http.setTimeout(1500);
+                code = http.POST(body);
+                payloadRes = (code > 0) ? http.getString() : "Timeout";
+                http.end();
+            }
+
+            response = "{\"status\":\"success\",\"code\":" + String(code) + ",\"remoteRes\":\"" + payloadRes + "\"}";
+            return true;
+        }
+
+        if (cmd == "discover_nodes") {
+            response = scanNetworkNodes();
             return true;
         }
 
@@ -290,6 +375,8 @@ public:
             json += "\"mac\":\"" + String(devs[i].mac) + "\",";
             json += "\"name\":\"" + String(devs[i].name) + "\",";
             json += "\"role\":\"" + String(devs[i].role) + "\",";
+            json += "\"ip\":\"" + String(devs[i].ip) + "\",";
+            json += "\"rssi\":" + String((int)devs[i].rssi) + ",";
             json += "\"priority\":" + String((int)devs[i].priority) + ",";
             json += "\"ratedWatts\":" + String(devs[i].ratedWatts, 1) + ",";
             json += "\"learnedSteadyWatts\":" + String(sig ? sig->learnedSteadyWatts : 0.0f, 1) + ",";
@@ -298,6 +385,7 @@ public:
             json += "\"isOverLimit\":" + String((sig && sig->isOverLimit) ? "true" : "false") + ",";
             json += "\"pausable\":" + String(devs[i].isPausable ? "true" : "false") + ",";
             json += "\"online\":" + String(devs[i].isOnline ? "true" : "false") + ",";
+            json += "\"isOverridden\":" + String(devs[i].isOverridden ? "true" : "false") + ",";
             json += "\"activePermit\":" + String(devs[i].hasActivePermit ? "true" : "false");
             json += "}";
         }
@@ -507,6 +595,45 @@ private:
         server.streamFile(f, mime);
         f.close();
         return true;
+    }
+
+    String scanNetworkNodes() {
+        String json = "{\"status\":\"success\",\"discovered\":[";
+        int n = MDNS.queryService("http", "tcp");
+        bool first = true;
+        for (int i = 0; i < n; ++i) {
+            String host = MDNS.hostname(i);
+            IPAddress ip = MDNS.IP(i);
+            uint16_t port = MDNS.port(i);
+
+            if (!first) json += ",";
+            first = false;
+            json += "{";
+            json += "\"host\":\"" + host + "\",";
+            json += "\"ip\":\"" + ip.toString() + "\",";
+            json += "\"port\":" + String(port) + ",";
+
+            // Match against registered appliances
+            uint8_t count = 0;
+            const RegisteredAppliance* devs = _arbiter.getDevices(count);
+            bool isPaired = false;
+            String pairedRole = "";
+            String pairedMac = "";
+            for (uint8_t d = 0; d < count; d++) {
+                if (String(devs[d].ip) == ip.toString()) {
+                    isPaired = true;
+                    pairedRole = devs[d].role;
+                    pairedMac = devs[d].mac;
+                    break;
+                }
+            }
+            json += "\"isPaired\":" + String(isPaired ? "true" : "false") + ",";
+            json += "\"role\":\"" + pairedRole + "\",";
+            json += "\"mac\":\"" + pairedMac + "\"";
+            json += "}";
+        }
+        json += "]}";
+        return json;
     }
 
     void ensureParentDir(const String& path) {

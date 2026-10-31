@@ -55,11 +55,14 @@ struct RegisteredAppliance {
     char              mac[18];          // MAC address (Primary ID)
     char              name[32];         // Human readable nickname e.g. "Submersible Pump"
     char              role[24];         // Role identifier e.g. "water_pump", "washing_machine"
+    char              ip[16];           // Last known IP address e.g. "192.168.2.149"
+    int8_t            rssi;             // Wi-Fi signal strength in dBm
     AppliancePriority priority;         // 1 = Critical, 2 = High, 3 = Normal, 4 = Low
     float             ratedWatts;       // Expected power draw (e.g. 500W)
     bool              isPausable;       // Can the Central Brain pause this to siphon power?
     bool              isOnline;         // Currently sending heartbeats
     bool              hasActivePermit;  // Currently holding a valid power permit
+    bool              isOverridden;     // Manual override active
     uint32_t          lastSeenMillis;
     float             cumulativeKwh;
 };

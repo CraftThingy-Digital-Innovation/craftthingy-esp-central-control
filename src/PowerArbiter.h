@@ -102,18 +102,22 @@ public:
     // Device Registration & Priority Management
     // ------------------------------------------------------------------------
     bool registerOrUpdateAppliance(const char* mac, const char* name, const char* role,
-                                   AppliancePriority priority, float ratedWatts, bool isPausable) {
+                                   AppliancePriority priority, float ratedWatts, bool isPausable,
+                                   const char* ip = nullptr, int8_t rssi = 0) {
         if (!mac || strlen(mac) == 0) return false;
 
         int idx = findDeviceIndex(mac);
         if (idx < 0) {
             if (_deviceCount >= MAX_REGISTERED_DEVICES) return false;
             idx = _deviceCount++;
+            memset(&_devices[idx], 0, sizeof(RegisteredAppliance));
             strncpy(_devices[idx].mac, mac, sizeof(_devices[idx].mac) - 1);
         }
 
         if (name && strlen(name) > 0) strncpy(_devices[idx].name, name, sizeof(_devices[idx].name) - 1);
         if (role && strlen(role) > 0) strncpy(_devices[idx].role, role, sizeof(_devices[idx].role) - 1);
+        if (ip && strlen(ip) > 0) strncpy(_devices[idx].ip, ip, sizeof(_devices[idx].ip) - 1);
+        if (rssi != 0) _devices[idx].rssi = rssi;
         _devices[idx].priority = priority;
         _devices[idx].ratedWatts = ratedWatts;
         _devices[idx].isPausable = isPausable;
@@ -123,11 +127,41 @@ public:
         return true;
     }
 
-    void updateHeartbeat(const char* mac) {
+    bool updateDevicePriority(const char* mac, AppliancePriority priority, float ratedWatts, bool isPausable) {
+        int idx = findDeviceIndex(mac);
+        if (idx < 0) return false;
+        _devices[idx].priority = priority;
+        if (ratedWatts > 0.0f) _devices[idx].ratedWatts = ratedWatts;
+        _devices[idx].isPausable = isPausable;
+        saveDevicesToNvs();
+        return true;
+    }
+
+    bool removeDevice(const char* mac) {
+        int idx = findDeviceIndex(mac);
+        if (idx < 0) return false;
+        for (uint8_t i = idx; i < _deviceCount - 1; i++) {
+            _devices[i] = _devices[i + 1];
+        }
+        _deviceCount--;
+        saveDevicesToNvs();
+        return true;
+    }
+
+    bool setDeviceOverride(const char* mac, bool isOverridden) {
+        int idx = findDeviceIndex(mac);
+        if (idx < 0) return false;
+        _devices[idx].isOverridden = isOverridden;
+        return true;
+    }
+
+    void updateHeartbeat(const char* mac, const char* ip = nullptr, int8_t rssi = 0) {
         int idx = findDeviceIndex(mac);
         if (idx >= 0) {
             _devices[idx].isOnline = true;
             _devices[idx].lastSeenMillis = millis();
+            if (ip && strlen(ip) > 0) strncpy(_devices[idx].ip, ip, sizeof(_devices[idx].ip) - 1);
+            if (rssi != 0) _devices[idx].rssi = rssi;
         }
     }
 
