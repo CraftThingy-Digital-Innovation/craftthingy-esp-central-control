@@ -499,61 +499,65 @@
           <span class="number" id="dc-power">-- mW</span>
         </div>
       </div>
-
-    <!-- Row 2: Real-Time Power Trajectory, Virtual MCB & Breaker Safety Zones -->
-    <div class="card" style="grid-column: 1 / -1;">
-      <div class="card-header">
-        <span class="card-title">📈 Real-Time Power Trajectory, Virtual MCB & Breaker Safety Zones</span>
-        <div style="display:flex; gap:12px; font-size:0.75rem; flex-wrap:wrap; align-items:center;">
-          <div style="display:flex; align-items:center; gap:4px;">
-            <span style="display:inline-block; width:12px; height:3px; background:var(--accent);"></span>
-            <span>Measured Load</span>
-          </div>
-          <div style="display:flex; align-items:center; gap:4px;">
-            <span style="display:inline-block; width:12px; height:3px; background:var(--purple); border-top:1px dashed var(--purple);"></span>
-            <span>Virtual Predicted</span>
-          </div>
-          <div style="display:flex; align-items:center; gap:4px;">
-            <span style="display:inline-block; width:12px; height:2px; background:var(--warning); border-top:1px dashed var(--warning);"></span>
-            <span>Safe Ceiling (<span id="legend-ceiling">1170 W</span>)</span>
-          </div>
-          <div style="display:flex; align-items:center; gap:4px;">
-            <span style="display:inline-block; width:12px; height:2px; background:var(--danger); border-top:1px dashed var(--danger);"></span>
-            <span>MCB Trip Rating (<span id="legend-mcb">1300 W</span>)</span>
-          </div>
-        </div>
+      <div style="font-size: 0.8rem; color: var(--text-muted); display:flex; justify-content:space-between; margin-top: 4px;">
+        <span>SD Blackbox:</span>
+        <strong style="color: var(--text);" id="sd-records-text">Active Logging</strong>
       </div>
+    </div>
+  </div>
 
-      <!-- Canvas Chart Container -->
-      <div style="position:relative; width:100%; background:rgba(0,0,0,0.35); border:1px solid var(--card-border); border-radius:8px; padding:12px 12px 6px 12px;">
-        <canvas id="powerChart" height="240" style="width:100%; display:block;"></canvas>
-        <div id="chart-watermark" style="position:absolute; top:20px; right:24px; text-align:right; pointer-events:none;">
-          <div style="font-size:2rem; font-weight:800; color:var(--text);" id="chart-power-val">-- W</div>
-          <div style="font-size:0.8rem; font-weight:600; padding:3px 8px; border-radius:4px; display:inline-block; margin-top:4px;" id="chart-safety-badge">ANALYZING LOAD...</div>
+  <!-- Row 2: Real-Time Power Trajectory, Virtual MCB & Breaker Safety Zones -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">📈 Real-Time Power Trajectory, Virtual MCB & Breaker Safety Zones</span>
+      <div style="display:flex; gap:12px; font-size:0.75rem; flex-wrap:wrap; align-items:center;">
+        <div style="display:flex; align-items:center; gap:4px;">
+          <span style="display:inline-block; width:12px; height:3px; background:var(--accent);"></span>
+          <span>Measured Load</span>
         </div>
-      </div>
-
-      <!-- Sub-Chart Real-Time Status Ticker -->
-      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap:10px; font-size:0.8rem; margin-top:4px;">
-        <div class="metric-tile">
-          <span class="label">Headroom to Safe Cushion</span>
-          <span class="number" id="chart-headroom">-- W</span>
+        <div style="display:flex; align-items:center; gap:4px;">
+          <span style="display:inline-block; width:12px; height:3px; background:var(--purple); border-top:1px dashed var(--purple);"></span>
+          <span>Virtual Predicted</span>
         </div>
-        <div class="metric-tile">
-          <span class="label">Virtual Bimetal State</span>
-          <span class="number" id="chart-mcb-pred">SAFE (Cold)</span>
+        <div style="display:flex; align-items:center; gap:4px;">
+          <span style="display:inline-block; width:12px; height:2px; background:var(--warning); border-top:1px dashed var(--warning);"></span>
+          <span>Safe Ceiling (<span id="legend-ceiling">1170 W</span>)</span>
         </div>
-        <div class="metric-tile">
-          <span class="label">Projected Inrush Spike</span>
-          <span class="number" id="chart-inrush-pred">-- W</span>
-        </div>
-        <div class="metric-tile">
-          <span class="label">Load Siphoning State</span>
-          <span class="number" id="chart-siphon-state">Normal Operation</span>
+        <div style="display:flex; align-items:center; gap:4px;">
+          <span style="display:inline-block; width:12px; height:2px; background:var(--danger); border-top:1px dashed var(--danger);"></span>
+          <span>MCB Trip Rating (<span id="legend-mcb">1300 W</span>)</span>
         </div>
       </div>
     </div>
 
+    <!-- Canvas Chart Container -->
+    <div style="position:relative; width:100%; background:rgba(0,0,0,0.35); border:1px solid var(--card-border); border-radius:8px; padding:12px 12px 6px 12px;">
+      <canvas id="powerChart" height="240" style="width:100%; display:block;"></canvas>
+      <div id="chart-watermark" style="position:absolute; top:20px; right:24px; text-align:right; pointer-events:none;">
+        <div style="font-size:2rem; font-weight:800; color:var(--text);" id="chart-power-val">-- W</div>
+        <div style="font-size:0.8rem; font-weight:600; padding:3px 8px; border-radius:4px; display:inline-block; margin-top:4px;" id="chart-safety-badge">ANALYZING LOAD...</div>
+      </div>
+    </div>
+
+    <!-- Sub-Chart Real-Time Status Ticker -->
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap:10px; font-size:0.8rem; margin-top:4px;">
+      <div class="metric-tile">
+        <span class="label">Headroom to Safe Cushion</span>
+        <span class="number" id="chart-headroom">-- W</span>
+      </div>
+      <div class="metric-tile">
+        <span class="label">Virtual Bimetal State</span>
+        <span class="number" id="chart-mcb-pred">SAFE (Cold)</span>
+      </div>
+      <div class="metric-tile">
+        <span class="label">Projected Inrush Spike</span>
+        <span class="number" id="chart-inrush-pred">-- W</span>
+      </div>
+      <div class="metric-tile">
+        <span class="label">Load Siphoning State</span>
+        <span class="number" id="chart-siphon-state">Normal Operation</span>
+      </div>
+    </div>
   </div>
 
   <!-- Row 2: Appliance Priority Hierarchy & Manual Overrides -->
@@ -703,12 +707,13 @@
     const ctx = canvas.getContext("2d");
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
+    const w = (rect.width && rect.width > 50) ? rect.width : (canvas.parentElement ? canvas.parentElement.clientWidth : 800);
+    if (!w || w <= 0) return;
     
-    canvas.width = rect.width * dpr;
-    canvas.height = 240 * dpr;
+    canvas.width = Math.floor(w * dpr);
+    canvas.height = Math.floor(240 * dpr);
     ctx.scale(dpr, dpr);
 
-    const w = rect.width;
     const h = 240;
     const padL = 50;
     const padR = 20;
@@ -716,6 +721,7 @@
     const padB = 30;
     const plotW = w - padL - padR;
     const plotH = h - padT - padB;
+    if (plotW <= 0 || plotH <= 0) return;
 
     ctx.clearRect(0, 0, w, h);
 
@@ -893,6 +899,12 @@
     }
   }
 
+  window.addEventListener("resize", () => {
+    if (tripHistory.length > 0 && ceilingHistory.length > 0) {
+      drawCanvasChart(tripHistory[tripHistory.length - 1], ceilingHistory[ceilingHistory.length - 1]);
+    }
+  });
+
   async function fetchStatus() {
     try {
       const res = await fetch(`${BASE_URL}/api/v1/device/status`);
@@ -972,8 +984,10 @@
     }
 
     if (d.sd) {
-      document.getElementById("sd-badge").innerText = d.sd.mounted ? `SD: ${d.sd.totalMb - d.sd.usedMb}MB Free` : "SD: Unmounted";
-      document.getElementById("sd-records-text").innerText = `${d.sd.recordsToday} records (${d.sd.errors} err)`;
+      const sdBadge = document.getElementById("sd-badge");
+      if (sdBadge) sdBadge.innerText = d.sd.mounted ? `SD: ${d.sd.totalMb - d.sd.usedMb}MB Free` : "SD: Unmounted";
+      const sdRec = document.getElementById("sd-records-text");
+      if (sdRec) sdRec.innerText = `${d.sd.recordsToday || 0} records (${d.sd.errors || 0} err)`;
     }
 
     // Update Live Trajectory & Safety Zone Chart
@@ -1165,24 +1179,28 @@
     const targetPath = "/www/" + file.name;
     const text = await file.text();
 
-    showToast("Deploying " + targetPath + " to SD card...");
+    showToast("Deploying " + targetPath + " (" + text.length + " B)...");
     try {
-      const form = new URLSearchParams();
-      form.append("path", targetPath);
-      form.append("content", text);
-
-      const res = await fetch(`${BASE_URL}/api/v1/sd/write`, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: form.toString()
-      });
-      const data = await res.json();
-      if (data.status === "success") {
-        showToast("Success! " + targetPath + " uploaded (" + data.bytes + " bytes)");
-        loadSdFiles();
-      } else {
-        alert("Upload failed: " + (data.message || "Unknown error"));
+      const CHUNK_SIZE = 16384;
+      for (let offset = 0; offset < text.length; offset += CHUNK_SIZE) {
+        const chunk = text.slice(offset, offset + CHUNK_SIZE);
+        const isAppend = offset > 0;
+        const form = new URLSearchParams();
+        form.append("content", chunk);
+        const url = `${BASE_URL}/api/v1/sd/write?path=${encodeURIComponent(targetPath)}${isAppend ? "&append=1" : ""}`;
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: form.toString()
+        });
+        const data = await res.json();
+        if (data.status !== "success") {
+          alert("Upload failed at offset " + offset + ": " + (data.message || "Unknown error"));
+          return;
+        }
       }
+      showToast("Success! " + targetPath + " deployed (" + text.length + " bytes)");
+      loadSdFiles();
     } catch (e) {
       alert("Upload error: " + e.message);
     }
