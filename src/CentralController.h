@@ -416,7 +416,7 @@ public:
     bool handleHttpRequest(ApiServerType& server, const String& uri, const String& method) override {
         if (!_sd.isMounted()) return false;
 
-        // 1. SD File Upload / Write endpoint
+        // 1. SD File Upload / Write endpoint (Supports chunking & append)
         if (uri == "/api/v1/sd/write" && method == "POST") {
             String path = server.hasArg("path") ? server.arg("path") : "";
             if (path.length() == 0) {
@@ -429,20 +429,35 @@ public:
                 return true;
             }
 
+            bool isAppend = server.hasArg("append") && (server.arg("append") == "1" || server.arg("append") == "true");
             String content = server.hasArg("content") ? server.arg("content") : (server.hasArg("plain") ? server.arg("plain") : "");
             ensureParentDir(path);
 
-            File f = SD.open(path, FILE_WRITE);
+            File f = SD.open(path, isAppend ? FILE_APPEND : FILE_WRITE);
             if (!f) {
                 server.send(500, "application/json", "{\"status\":\"error\",\"message\":\"Failed to open file for writing\"}");
                 return true;
             }
-            size_t written = f.print(content);
+
+            size_t written = 0;
+            if (content.length() > 0) {
+                written = f.print(content);
+            } else {
+                WiFiClient client = server.client();
+                uint8_t sBuf[512];
+                while (client.available()) {
+                    int n = client.read(sBuf, sizeof(sBuf));
+                    if (n > 0) {
+                        written += f.write(sBuf, n);
+                    }
+                }
+            }
             f.flush();
             f.close();
 
-            char res[160];
-            snprintf(res, sizeof(res), "{\"status\":\"success\",\"path\":\"%s\",\"bytes\":%u}", path.c_str(), (unsigned int)written);
+            char res[180];
+            snprintf(res, sizeof(res), "{\"status\":\"success\",\"path\":\"%s\",\"bytes\":%u,\"append\":%s}", 
+                     path.c_str(), (unsigned int)written, isAppend ? "true" : "false");
             server.send(200, "application/json", res);
             return true;
         }

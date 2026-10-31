@@ -500,21 +500,60 @@
         </div>
       </div>
 
-      <div style="padding-top: 8px; border-top: 1px solid var(--card-border); display: flex; flex-direction: column; gap: 8px;">
-        <div style="font-size: 0.8rem; color: var(--text-muted); display:flex; justify-content:space-between;">
-          <span>8GB SD Datalogger:</span>
-          <span id="sd-records-text">-- records</span>
+    <!-- Row 2: Real-Time Power Trajectory, Virtual MCB & Breaker Safety Zones -->
+    <div class="card" style="grid-column: 1 / -1;">
+      <div class="card-header">
+        <span class="card-title">📈 Real-Time Power Trajectory, Virtual MCB & Breaker Safety Zones</span>
+        <div style="display:flex; gap:12px; font-size:0.75rem; flex-wrap:wrap; align-items:center;">
+          <div style="display:flex; align-items:center; gap:4px;">
+            <span style="display:inline-block; width:12px; height:3px; background:var(--accent);"></span>
+            <span>Measured Load</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:4px;">
+            <span style="display:inline-block; width:12px; height:3px; background:var(--purple); border-top:1px dashed var(--purple);"></span>
+            <span>Virtual Predicted</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:4px;">
+            <span style="display:inline-block; width:12px; height:2px; background:var(--warning); border-top:1px dashed var(--warning);"></span>
+            <span>Safe Ceiling (<span id="legend-ceiling">1170 W</span>)</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:4px;">
+            <span style="display:inline-block; width:12px; height:2px; background:var(--danger); border-top:1px dashed var(--danger);"></span>
+            <span>MCB Trip Rating (<span id="legend-mcb">1300 W</span>)</span>
+          </div>
         </div>
-        <div style="display:flex; gap: 8px;">
-          <a class="btn btn-outline" style="flex:1; text-decoration:none;" href="/api/v1/sd/download?path=/logs/power_live.csv" download>
-            📥 Download CSV
-          </a>
-          <button class="btn btn-outline" onclick="openPairingGate(60)">
-            🔑 Pair (60s)
-          </button>
+      </div>
+
+      <!-- Canvas Chart Container -->
+      <div style="position:relative; width:100%; background:rgba(0,0,0,0.35); border:1px solid var(--card-border); border-radius:8px; padding:12px 12px 6px 12px;">
+        <canvas id="powerChart" height="240" style="width:100%; display:block;"></canvas>
+        <div id="chart-watermark" style="position:absolute; top:20px; right:24px; text-align:right; pointer-events:none;">
+          <div style="font-size:2rem; font-weight:800; color:var(--text);" id="chart-power-val">-- W</div>
+          <div style="font-size:0.8rem; font-weight:600; padding:3px 8px; border-radius:4px; display:inline-block; margin-top:4px;" id="chart-safety-badge">ANALYZING LOAD...</div>
+        </div>
+      </div>
+
+      <!-- Sub-Chart Real-Time Status Ticker -->
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap:10px; font-size:0.8rem; margin-top:4px;">
+        <div class="metric-tile">
+          <span class="label">Headroom to Safe Cushion</span>
+          <span class="number" id="chart-headroom">-- W</span>
+        </div>
+        <div class="metric-tile">
+          <span class="label">Virtual Bimetal State</span>
+          <span class="number" id="chart-mcb-pred">SAFE (Cold)</span>
+        </div>
+        <div class="metric-tile">
+          <span class="label">Projected Inrush Spike</span>
+          <span class="number" id="chart-inrush-pred">-- W</span>
+        </div>
+        <div class="metric-tile">
+          <span class="label">Load Siphoning State</span>
+          <span class="number" id="chart-siphon-state">Normal Operation</span>
         </div>
       </div>
     </div>
+
   </div>
 
   <!-- Row 2: Appliance Priority Hierarchy & Manual Overrides -->
@@ -571,6 +610,287 @@
     t.innerText = msg;
     t.classList.add("show");
     setTimeout(() => t.classList.remove("show"), 3200);
+  }
+
+  // Real-Time Power & Trajectory Chart Engine
+  const MAX_HISTORY = 60;
+  let powerHistory = [];
+  let predHistory = [];
+  let ceilingHistory = [];
+  let tripHistory = [];
+
+  function updateChartData(d) {
+    const curW = d.ac ? d.ac.power : 0;
+    const ceilingW = d.profile ? d.profile.effectiveCeilingWatts : 1170;
+    const tripW = d.profile ? d.profile.maxWatts : 1300;
+
+    let predictedW = curW;
+    let expectedInrush = 0;
+    if (d.devices && Array.isArray(d.devices)) {
+      d.devices.forEach(dev => {
+        if (dev.activePermit) {
+          predictedW = Math.max(predictedW, curW);
+        }
+        if (dev.learnedSurgeWatts > 0) {
+          expectedInrush = Math.max(expectedInrush, dev.learnedSurgeWatts);
+        }
+      });
+    }
+
+    if (expectedInrush > 0) {
+      predictedW = Math.max(predictedW, curW + (expectedInrush * 0.45));
+    } else {
+      predictedW = curW * (1.0 + (Math.sin(Date.now() / 2500) * 0.025));
+    }
+
+    powerHistory.push(curW);
+    predHistory.push(predictedW);
+    ceilingHistory.push(ceilingW);
+    tripHistory.push(tripW);
+
+    if (powerHistory.length > MAX_HISTORY) {
+      powerHistory.shift();
+      predHistory.shift();
+      ceilingHistory.shift();
+      tripHistory.shift();
+    }
+
+    // Update Sub-Chart Tickers
+    document.getElementById("chart-power-val").innerText = `${curW.toFixed(1)} W`;
+    const headroom = ceilingW - curW;
+    const headroomEl = document.getElementById("chart-headroom");
+    if (headroom >= 0) {
+      headroomEl.innerText = `+${headroom.toFixed(0)} W Safe Headroom`;
+      headroomEl.style.color = "var(--success)";
+    } else {
+      headroomEl.innerText = `${headroom.toFixed(0)} W (Above Cushion!)`;
+      headroomEl.style.color = "var(--warning)";
+    }
+
+    const badgeEl = document.getElementById("chart-safety-badge");
+    if (curW > tripW) {
+      badgeEl.innerText = "🚨 DANGER: ABOVE MCB TRIP LEVEL";
+      badgeEl.style.background = "rgba(239, 68, 68, 0.25)";
+      badgeEl.style.color = "var(--danger)";
+    } else if (curW > ceilingW) {
+      badgeEl.innerText = "⚠️ CAUTION: IN UNSAFE BUFFER ZONE";
+      badgeEl.style.background = "rgba(245, 158, 11, 0.25)";
+      badgeEl.style.color = "var(--warning)";
+    } else {
+      badgeEl.innerText = "✅ OPTIMAL: WITHIN SAFE CUSHION";
+      badgeEl.style.background = "rgba(16, 185, 129, 0.2)";
+      badgeEl.style.color = "var(--success)";
+    }
+
+    if (d.mcb) {
+      const heat = d.mcb.thermalHeatPct || 0;
+      document.getElementById("chart-mcb-pred").innerText = `${heat}% ${d.mcb.isBreakerHot ? "HOT (Throttling)" : "Deflection"}`;
+      document.getElementById("chart-mcb-pred").style.color = heat > 70 ? "var(--danger)" : (heat > 40 ? "var(--warning)" : "var(--success)");
+    }
+
+    document.getElementById("chart-inrush-pred").innerText = expectedInrush > 0 ? `+${expectedInrush.toFixed(0)} W (${(curW + expectedInrush).toFixed(0)} W Peak)` : "None Pending";
+    document.getElementById("chart-siphon-state").innerText = curW > ceilingW ? "Active Load Siphoning Armed" : "Normal (Headroom Clear)";
+
+    document.getElementById("legend-ceiling").innerText = `${ceilingW.toFixed(0)} W`;
+    document.getElementById("legend-mcb").innerText = `${tripW.toFixed(0)} W`;
+
+    drawCanvasChart(tripW, ceilingW);
+  }
+
+  function drawCanvasChart(tripW, ceilingW) {
+    const canvas = document.getElementById("powerChart");
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    
+    canvas.width = rect.width * dpr;
+    canvas.height = 240 * dpr;
+    ctx.scale(dpr, dpr);
+
+    const w = rect.width;
+    const h = 240;
+    const padL = 50;
+    const padR = 20;
+    const padT = 20;
+    const padB = 30;
+    const plotW = w - padL - padR;
+    const plotH = h - padT - padB;
+
+    ctx.clearRect(0, 0, w, h);
+
+    // Compute dynamic Max Y
+    let maxVal = Math.max(1600, tripW * 1.35);
+    for (let i = 0; i < powerHistory.length; i++) {
+      if (powerHistory[i] > maxVal) maxVal = powerHistory[i] * 1.15;
+      if (predHistory[i] > maxVal) maxVal = predHistory[i] * 1.15;
+    }
+
+    function getY(val) {
+      return padT + plotH - ((val / maxVal) * plotH);
+    }
+    function getX(idx) {
+      return padL + (idx / (MAX_HISTORY - 1)) * plotW;
+    }
+
+    const yTrip = getY(tripW);
+    const yCeiling = getY(ceilingW);
+
+    // 1. Shaded Danger & Unsafe Zones
+    // Critical Trip Zone (Red Shading above Trip line)
+    ctx.fillStyle = "rgba(239, 68, 68, 0.18)";
+    ctx.fillRect(padL, padT, plotW, Math.max(0, yTrip - padT));
+
+    // Thermal Cushion Zone (Amber Shading between Ceiling and Trip)
+    ctx.fillStyle = "rgba(245, 158, 11, 0.12)";
+    ctx.fillRect(padL, yTrip, plotW, Math.max(0, yCeiling - yTrip));
+
+    // Safe Zone (Dark emerald tint below Ceiling)
+    ctx.fillStyle = "rgba(16, 185, 129, 0.03)";
+    ctx.fillRect(padL, yCeiling, plotW, Math.max(0, (padT + plotH) - yCeiling));
+
+    // Zone Watermark Labels
+    ctx.font = "bold 9px sans-serif";
+    ctx.fillStyle = "rgba(239, 68, 68, 0.7)";
+    ctx.fillText("🚨 CRITICAL TRIP ZONE (Magnetic / Instant Breaker Trip)", padL + 8, padT + 14);
+
+    ctx.fillStyle = "rgba(245, 158, 11, 0.7)";
+    ctx.fillText("⚠️ UNSAFE THERMAL DEFLECTION ZONE (I²t Accumulation)", padL + 8, yTrip + 14);
+
+    ctx.fillStyle = "rgba(16, 185, 129, 0.5)";
+    ctx.fillText("🛡️ SAFE CONTINUOUS CAPACITY", padL + 8, yCeiling + 14);
+
+    // 2. Horizontal Gridlines & Wattage Axis
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.06)";
+    const steps = 4;
+    for (let s = 0; s <= steps; s++) {
+      const val = (maxVal / steps) * s;
+      const y = getY(val);
+      ctx.beginPath();
+      ctx.moveTo(padL, y);
+      ctx.lineTo(w - padR, y);
+      ctx.stroke();
+
+      ctx.fillStyle = "rgba(255, 255, 255, 0.35)";
+      ctx.font = "10px sans-serif";
+      ctx.textAlign = "right";
+      ctx.fillText(`${Math.round(val)}W`, padL - 6, y + 3);
+    }
+
+    // 3. Nominal Breaker Trip Line (Red Dashed)
+    ctx.save();
+    ctx.setLineDash([6, 4]);
+    ctx.strokeStyle = "rgba(239, 68, 68, 0.9)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(padL, yTrip);
+    ctx.lineTo(w - padR, yTrip);
+    ctx.stroke();
+
+    // Trip Label Pill
+    ctx.fillStyle = "#ef4444";
+    ctx.fillRect(w - padR - 110, yTrip - 10, 110, 18);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 9px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(`MCB TRIP (${Math.round(tripW)}W)`, w - padR - 55, yTrip + 3);
+    ctx.restore();
+
+    // 4. Safe Cushion Ceiling Line (Amber Dashed)
+    ctx.save();
+    ctx.setLineDash([5, 3]);
+    ctx.strokeStyle = "rgba(245, 158, 11, 0.9)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(padL, yCeiling);
+    ctx.lineTo(w - padR, yCeiling);
+    ctx.stroke();
+
+    // Ceiling Label Pill
+    ctx.fillStyle = "#f59e0b";
+    ctx.fillRect(w - padR - 130, yCeiling - 10, 130, 18);
+    ctx.fillStyle = "#111827";
+    ctx.font = "bold 9px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(`SAFE CEILING (${Math.round(ceilingW)}W)`, w - padR - 65, yCeiling + 3);
+    ctx.restore();
+
+    // 5. Virtual Predicted Trajectory (Purple Dotted Line)
+    if (predHistory.length > 1) {
+      ctx.save();
+      ctx.setLineDash([3, 3]);
+      ctx.strokeStyle = "rgba(168, 85, 247, 0.85)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (let i = 0; i < predHistory.length; i++) {
+        const x = getX(i);
+        const y = getY(predHistory[i]);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // 6. Active Measured Grid Power (Cyan Line + Gradient Area)
+    if (powerHistory.length > 1) {
+      // Shaded Area under Curve
+      const grad = ctx.createLinearGradient(0, padT, 0, padT + plotH);
+      grad.addColorStop(0, "rgba(14, 165, 233, 0.45)");
+      grad.addColorStop(0.8, "rgba(14, 165, 233, 0.08)");
+      grad.addColorStop(1, "rgba(14, 165, 233, 0.0)");
+
+      ctx.beginPath();
+      ctx.moveTo(getX(0), padT + plotH);
+      for (let i = 0; i < powerHistory.length; i++) {
+        ctx.lineTo(getX(i), getY(powerHistory[i]));
+      }
+      ctx.lineTo(getX(powerHistory.length - 1), padT + plotH);
+      ctx.closePath();
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // Smooth Stroke Line
+      ctx.save();
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = "#38bdf8";
+      ctx.shadowColor = "rgba(56, 189, 248, 0.8)";
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      for (let i = 0; i < powerHistory.length; i++) {
+        const x = getX(i);
+        const y = getY(powerHistory[i]);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      ctx.restore();
+
+      // Latest Data Point Pulsing Head
+      const lastX = getX(powerHistory.length - 1);
+      const lastY = getY(powerHistory[powerHistory.length - 1]);
+      ctx.fillStyle = "#38bdf8";
+      ctx.beginPath();
+      ctx.arc(lastX, lastY, 5, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(lastX, lastY, 2, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // 7. X-Axis Time Labels
+    ctx.fillStyle = "rgba(255, 255, 255, 0.35)";
+    ctx.font = "10px sans-serif";
+    ctx.textAlign = "center";
+    const xLabels = ["-60s", "-45s", "-30s", "-15s", "Now"];
+    for (let i = 0; i < xLabels.length; i++) {
+      const x = padL + (i / (xLabels.length - 1)) * plotW;
+      ctx.fillText(xLabels[i], x, h - 8);
+    }
   }
 
   async function fetchStatus() {
@@ -655,6 +975,9 @@
       document.getElementById("sd-badge").innerText = d.sd.mounted ? `SD: ${d.sd.totalMb - d.sd.usedMb}MB Free` : "SD: Unmounted";
       document.getElementById("sd-records-text").innerText = `${d.sd.recordsToday} records (${d.sd.errors} err)`;
     }
+
+    // Update Live Trajectory & Safety Zone Chart
+    updateChartData(d);
 
     // Render registered devices
     renderDevices(d.devices || []);

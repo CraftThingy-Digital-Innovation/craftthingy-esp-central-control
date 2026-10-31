@@ -406,18 +406,31 @@ private:
             float customW = prefs.getFloat("maxWatts", 1300.0f);
             uint8_t buf = prefs.getUChar("bufferPct", 10);
             
-            // Restore registered appliances across reboots / OTA
-            uint8_t count = prefs.getUChar("dev_count", 0);
+            // Restore registered appliances across reboots / OTA (v2 format)
+            uint8_t count = prefs.getUChar("dev_cnt_v2", 0);
             if (count > MAX_REGISTERED_DEVICES) count = MAX_REGISTERED_DEVICES;
             _deviceCount = count;
             if (_deviceCount > 0) {
-                prefs.getBytes("devices", _devices, _deviceCount * sizeof(RegisteredAppliance));
-                // Reset volatile runtime flags on boot
-                for (uint8_t i = 0; i < _deviceCount; i++) {
-                    _devices[i].isOnline = false;
-                    _devices[i].hasActivePermit = false;
-                    _devices[i].lastSeenMillis = 0;
+                size_t expected = _deviceCount * sizeof(RegisteredAppliance);
+                if (prefs.getBytesLength("devices_v2") == expected) {
+                    prefs.getBytes("devices_v2", _devices, expected);
+                } else {
+                    _deviceCount = 0;
+                    memset(_devices, 0, sizeof(_devices));
                 }
+            } else {
+                memset(_devices, 0, sizeof(_devices));
+            }
+
+            // Enforce clean string termination & volatile state reset
+            for (uint8_t i = 0; i < MAX_REGISTERED_DEVICES; i++) {
+                _devices[i].mac[sizeof(_devices[i].mac) - 1] = '\0';
+                _devices[i].name[sizeof(_devices[i].name) - 1] = '\0';
+                _devices[i].role[sizeof(_devices[i].role) - 1] = '\0';
+                _devices[i].ip[sizeof(_devices[i].ip) - 1] = '\0';
+                _devices[i].isOnline = false;
+                _devices[i].hasActivePermit = false;
+                _devices[i].lastSeenMillis = 0;
             }
             prefs.end();
 
@@ -439,9 +452,9 @@ private:
     void saveDevicesToNvs() {
         Preferences prefs;
         if (prefs.begin("power_arb", false)) {
-            prefs.putUChar("dev_count", _deviceCount);
+            prefs.putUChar("dev_cnt_v2", _deviceCount);
             if (_deviceCount > 0) {
-                prefs.putBytes("devices", _devices, _deviceCount * sizeof(RegisteredAppliance));
+                prefs.putBytes("devices_v2", _devices, _deviceCount * sizeof(RegisteredAppliance));
             }
             prefs.end();
         }
