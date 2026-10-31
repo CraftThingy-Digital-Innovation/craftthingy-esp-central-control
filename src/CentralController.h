@@ -42,7 +42,7 @@ public:
         _pzem.begin();
         Serial.printf("[INIT] PZEM-004T AC Sensor (RX:%d, TX:%d): Modbus-RTU 9600 baud initialized\n", PIN_PZEM_RX, PIN_PZEM_TX);
 
-        bool inaOk = _ina226.begin(INA226_I2C_ADDR, 0.01f);
+        bool inaOk = _ina226.begin(INA226_I2C_ADDR, INA226_SHUNT_OHMS);
         Serial.printf("[INIT] INA226 DC Sensor (I2C 0x%02X, SDA:%d, SCL:%d): %s\n", 
                       INA226_I2C_ADDR, PIN_I2C_SDA, PIN_I2C_SCL, 
                       inaOk ? "ONLINE (Ready)" : "NOT DETECTED (Offline)");
@@ -303,7 +303,8 @@ public:
         }
         json += "],";
 
-        json += "\"pairingActive\":" + String(_pairingWindowActive ? "true" : "false");
+        json += "\"pairingActive\":" + String(_pairingWindowActive ? "true" : "false") + ",";
+        json += "\"diag\":{\"ina226\":" + _ina226.diagJson() + ",\"pzem\":" + _pzem.diagJson() + "}";
         json += "}";
         return json;
     }

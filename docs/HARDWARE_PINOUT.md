@@ -6,8 +6,9 @@ This assignment avoids all ESP32 strapping pins (GPIO 0, 2, 12, 15) and Wi-Fi AD
 
 | Subsystem | Signal Name | ESP32 GPIO | Direction | Level | Notes |
 |---|---|---|---|---|---|
-| **PZEM-004T v3/v4** | `ESP32 RX2` $\leftarrow$ PZEM TX | **GPIO 16** | Input | 3.3V Native | Hardware UART2. Native 3.3V with 3.3V PZEM logic jumper |
-| | `ESP32 TX2` $\rightarrow$ PZEM RX | **GPIO 17** | Output | 3.3V Native | Hardware UART2 |
+| **PZEM-004T v3/v4** | `ESP32 RX2` $\leftarrow$ PZEM TX | **GPIO 16** | Input | 3.3V Clamped | Hardware UART2. 1N4148 diode shifter (Cathode to PZEM TX, Anode to GPIO 16). Internal pullup holds 3.3V. |
+| | `ESP32 TX2` $\rightarrow$ PZEM RX | **GPIO 17** | Output | 3.3V Native | Hardware UART2 (Drives 5V PZEM RX optocoupler directly) |
+| | `VCC / GND` | **5V Rail / GND** | Power / Ground | 5.0V / 0V | PZEM powered from stable 5V rail (Boost converter output) |
 | **INA226 DC Sensor** | `I2C SDA` | **GPIO 21** | Bidirectional | 3.3V | I2C Data (Auto-detected address: 0x44 on this module) |
 | | `I2C SCL` | **GPIO 22** | Output | 3.3V | I2C Clock (Standard 100 kHz) |
 | | `VCC / GND` | **3V3 / GND** | Power / Ground | 3.3V | Sensor chip logic supply from ESP32 3V3 |
@@ -29,18 +30,22 @@ This assignment avoids all ESP32 strapping pins (GPIO 0, 2, 12, 15) and Wi-Fi AD
 
 ---
 
-## 2. PZEM-004T v3/v4 Connection (3.3V Native Mode)
+## 2. PZEM-004T v3/v4 Connection (5V Power with 1N4148 Diode Level Shifter)
 
 ```
-[ ESP32 38-Pin DevKit ]                      [ PZEM-004T v3.0 / v4.0 ]
-         3V3 ────────────────────────────────────── VCC (3.3V Jumper closed)
-         GND ────────────────────────────────────── GND
- GPIO 16 (RX2) ◄─────────────────────────────────── TXD (3.3V Logic)
- GPIO 17 (TX2) ───────────────────────────────────► RXD (3.3V Logic)
+[ ESP32 38-Pin DevKit ]                                 [ PZEM-004T v3.0 / v4.0 ]
+   5V / VIN Rail ────────────────────────────────────────────── 5V / VCC Power
+             GND ────────────────────────────────────────────── GND (Common Ground)
+   GPIO 17 (TX2) ─────────────────────────────────────────────► RXD (Direct Drive)
+                                    1N4148 Diode
+   GPIO 16 (RX2) ◄─────────[Anode]───┤◄───[Cathode]──────────── TXD (5V Output)
+   (Internal Pullup enabled to 3.3V)
 ```
 
-> **Note on 3.3V Operation:** 
-> When the PZEM-004T is operated with its 3.3V solder bridge or powered at 3.3V VCC, both TX and RX lines interface directly with the ESP32 with **zero voltage dividers or level shifters**.
+> **How the 1N4148 Diode Level Shifter Operates:**
+> * **When PZEM TX is HIGH (5V):** The 1N4148 diode is **reverse-biased** (Cathode = 5V, Anode = 3.3V). The diode blocks current completely. The ESP32 internal pullup holds the GPIO 16 line cleanly at **3.3V**. ZERO 5V reaches the ESP32 silicon.
+> * **When PZEM TX is LOW (0V):** The 1N4148 diode is **forward-biased** (Cathode = 0V, Anode = 3.3V). The diode conducts and pulls the ESP32 GPIO 16 line down to **~0.6V** (well below the ESP32 CMOS low logic threshold of 0.8V).
+> * **PZEM RX Drive:** The ESP32 GPIO 17 directly drives the PZEM RX optocoupler LED without needing level shifting because sinking current to GND through an optocoupler works natively at 3.3V.
 
 ---
 

@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CraftThingy Central Control & 1300W Arbiter — Live Monitor</title>
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --card: #111827;
+      --card-inner: #1f2937;
+      --border: #374151;
+      --accent: #38bdf8;
+      --accent-hover: #0284c7;
+      --text: #f9fafb;
+      --text-muted: #9ca3af;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --purple: #a855f7;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 20px;
+      display: flex;
+      justify-content: center;
+    }
+    .container { width: 100%; max-width: 1100px; }
+    
+    /* Header */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .header-titles h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .header-titles p {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 9999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--success);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+    .status-badge.error {
+      background: rgba(239, 68, 68, 0.15);
+      color: var(--danger);
+      border-color: rgba(239, 68, 68, 0.3);
+    }
+    .status-badge.connecting {
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--warning);
+      border-color: rgba(245, 158, 11, 0.3);
+    }
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 8px currentColor;
+    }
+
+    /* Connection Bar */
+    .conn-bar {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+      margin-bottom: 20px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .conn-field {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+    .conn-field input {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 10px;
+      color: #fff;
+      font-size: 0.85rem;
+      outline: none;
+    }
+    .conn-field input:focus { border-color: var(--accent); }
+    .btn {
+      background: var(--accent);
+      color: #0b0f19;
+      font-weight: 600;
+      font-size: 0.85rem;
+      border: none;
+      border-radius: 6px;
+      padding: 7px 14px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn:hover { background: var(--accent-hover); }
+    .btn-secondary {
+      background: var(--card-inner);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { background: #374151; }
+
+    /* Grid Layout */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .grid-4 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
+    }
+
+    /* Cards */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+    }
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .card-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .card-badge {
+      font-size: 0.75rem;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-weight: 600;
+    }
+    .badge-online { background: rgba(16, 185, 129, 0.2); color: var(--success); }
+    .badge-offline { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
+    .badge-warn { background: rgba(245, 158, 11, 0.2); color: var(--warning); }
+    .badge-blue { background: rgba(56, 189, 248, 0.2); color: var(--accent); }
+
+    /* Big Gauge Metric */
+    .gauge-wrapper {
+      text-align: center;
+      padding: 10px 0;
+    }
+    .big-value {
+      font-size: 3rem;
+      font-weight: 800;
+      color: #fff;
+      line-height: 1;
+      font-feature-settings: "tnum";
+    }
+    .big-unit {
+      font-size: 1.1rem;
+      color: var(--text-muted);
+      font-weight: 500;
+      margin-left: 4px;
+    }
+    .big-label {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-top: 6px;
+    }
+
+    /* Meter / Progress Bar */
+    .progress-track {
+      background: #1f2937;
+      height: 12px;
+      border-radius: 6px;
+      overflow: hidden;
+      margin: 14px 0 8px 0;
+      position: relative;
+    }
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 6px;
+      transition: width 0.3s ease, background 0.3s ease;
+      background: var(--success);
+    }
+    .progress-markers {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.7rem;
+      color: var(--text-muted);
+    }
+
+    /* Stat Box */
+    .stat-box {
+      background: var(--card-inner);
+      border: 1px solid rgba(255,255,255,0.05);
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+    .stat-box .stat-label {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+    .stat-box .stat-val {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #fff;
+      font-feature-settings: "tnum";
+    }
+    .stat-box .stat-sub {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* Canvas Chart */
+    .chart-container {
+      position: relative;
+      width: 100%;
+      height: 140px;
+      margin-top: 14px;
+    }
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* Table */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+      margin-top: 8px;
+    }
+    th {
+      text-align: left;
+      padding: 8px;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      font-weight: 600;
+    }
+    td {
+      padding: 8px;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+
+    /* Alert Banner */
+    .alert-banner {
+      background: rgba(239, 68, 68, 0.2);
+      border: 1px solid var(--danger);
+      color: #fca5a5;
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 16px;
+      display: none;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* System Info Footer */
+    footer {
+      margin-top: 24px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header>
+      <div class="header-titles">
+        <h1>⚡ Central Control & 1300W Energy Arbiter</h1>
+        <p>Real-Time Industrial IoT Mains Telemetry, $I^2t$ Virtual MCB & Dual Power Monitoring</p>
+      </div>
+      <div id="statusPill" class="status-badge connecting">
+        <span class="pulse-dot"></span>
+        <span id="statusText">Connecting...</span>
+      </div>
+    </header>
+
+    <!-- Connection Configuration -->
+    <div class="conn-bar">
+      <div class="conn-field">
+        <label>ESP Host:</label>
+        <input type="text" id="hostInput" value="192.168.2.148" style="width: 140px;">
+      </div>
+      <div class="conn-field">
+        <label>Token:</label>
+        <input type="password" id="keyInput" value="a1b2c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff00" style="width: 180px;">
+      </div>
+      <div class="conn-field">
+        <label>Refresh:</label>
+        <select id="pollInterval" style="background: var(--bg); border: 1px solid var(--border); color:#fff; padding:6px; border-radius:6px;">
+          <option value="500">500 ms</option>
+          <option value="1000" selected>1.0 sec</option>
+          <option value="2000">2.0 sec</option>
+          <option value="5000">5.0 sec</option>
+        </select>
+      </div>
+      <button class="btn" id="btnPollNow" onclick="fetchTelemetry()">Refresh Now</button>
+      <button class="btn btn-secondary" id="btnPause" onclick="togglePause()">Pause</button>
+    </div>
+
+    <!-- Surge / Overload Alert Banner -->
+    <div id="surgeAlert" class="alert-banner">
+      ⚠️ <strong>OVERLOAD ALERT:</strong> Real-time consumption exceeds safe ceiling (1170W). Virtual MCB thermal accumulation active!
+    </div>
+
+    <!-- Main Live Metrics Grid -->
+    <div class="grid-2">
+      <!-- AC Mains & Virtual MCB -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">🔌 220V AC Mains (PZEM-004T)</div>
+          <span id="acBadge" class="card-badge badge-offline">Offline</span>
+        </div>
+
+        <div class="gauge-wrapper">
+          <div class="big-value">
+            <span id="acPower">0.0</span><span class="big-unit">W</span>
+          </div>
+          <div class="big-label">Active Power Consumption</div>
+        </div>
+
+        <!-- Power vs Ceiling Bar -->
+        <div class="progress-track">
+          <div id="powerBar" class="progress-fill" style="width: 0%;"></div>
+        </div>
+        <div class="progress-markers">
+          <span>0W</span>
+          <span>Safe: 1170W</span>
+          <span>Trip: 1300W</span>
+        </div>
+
+        <div class="grid-4" style="margin-top: 14px;">
+          <div class="stat-box">
+            <div class="stat-label">Voltage</div>
+            <div class="stat-val" id="acVolt">0.0 <span style="font-size:0.75rem;">V</span></div>
+            <div class="stat-sub">Mains RMS</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Current</div>
+            <div class="stat-val" id="acCurr">0.000 <span style="font-size:0.75rem;">A</span></div>
+            <div class="stat-sub">CT Sensor</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Power Factor</div>
+            <div class="stat-val" id="acPf">0.00</div>
+            <div class="stat-sub" id="acFreq">0.0 Hz</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Energy</div>
+            <div class="stat-val" id="acEnergy">0.000 <span style="font-size:0.75rem;">kWh</span></div>
+            <div class="stat-sub">Cumulative</div>
+          </div>
+        </div>
+
+        <!-- 60-Second Rolling Chart -->
+        <div class="chart-container">
+          <canvas id="powerChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Virtual MCB & DC Battery Monitor -->
+      <div style="display:flex; flex-direction:column; gap:16px;">
+        <!-- Virtual MCB Thermal Model -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">🛡️ Virtual MCB (1300W Profile)</div>
+            <span id="mcbBadge" class="card-badge badge-online">Normal</span>
+          </div>
+
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <span style="font-size:0.85rem; color:var(--text-muted);">Thermal Heat Accumulator:</span>
+            <strong id="mcbHeatText" style="font-size:0.95rem; color:#fff;">0%</strong>
+          </div>
+          <div class="progress-track" style="margin: 4px 0 12px 0;">
+            <div id="mcbHeatBar" class="progress-fill" style="width: 0%; background: var(--success);"></div>
+          </div>
+
+          <div class="grid-2" style="margin-bottom: 0;">
+            <div class="stat-box">
+              <div class="stat-label">Safe Ceiling</div>
+              <div class="stat-val" id="arbCeiling">1170 <span style="font-size:0.75rem;">W</span></div>
+              <div class="stat-sub">10% Safety Cushion</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Time to Trip</div>
+              <div class="stat-val" id="mcbTripTime">∞</div>
+              <div class="stat-sub">Inverse Thermal Time</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- DC Battery & Backup Monitor (INA226) -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">🔋 DC Power / Battery (INA226)</div>
+            <span id="inaBadge" class="card-badge badge-offline">Offline</span>
+          </div>
+
+          <div class="grid-4">
+            <div class="stat-box">
+              <div class="stat-label">DC Voltage</div>
+              <div class="stat-val" id="dcVolt">0.00 <span style="font-size:0.75rem;">V</span></div>
+              <div class="stat-sub">VBUS Rail</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">DC Current</div>
+              <div class="stat-val" id="dcCurr">0.0 <span style="font-size:0.75rem;">mA</span></div>
+              <div class="stat-sub">Charge / Load</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">DC Power</div>
+              <div class="stat-val" id="dcPower">0.0 <span style="font-size:0.75rem;">mW</span></div>
+              <div class="stat-sub">Battery Power</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Battery SoC</div>
+              <div class="stat-val" id="dcSoc">0 <span style="font-size:0.75rem;">%</span></div>
+              <div class="stat-sub">Li-ion / 12V</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- MicroSD Logger Vault -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">💾 8GB MicroSD Logger Vault</div>
+            <span id="sdBadge" class="card-badge badge-online">Mounted</span>
+          </div>
+          <div class="grid-2" style="margin-bottom:0;">
+            <div class="stat-box">
+              <div class="stat-label">Logged Today</div>
+              <div class="stat-val" id="sdRecords">0 <span style="font-size:0.75rem;">rows</span></div>
+              <div class="stat-sub" id="sdFile">/logs/power_live.csv</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Card Storage</div>
+              <div class="stat-val" id="sdStorage">-- / --</div>
+              <div class="stat-sub">FAT32 File System</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Power Permits & Connected Appliances -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">📡 Managed Appliances & Active Power Permits (<span id="permitCount">0</span>)</div>
+        <button class="btn btn-secondary" onclick="openPairingWindow()" style="padding:4px 10px; font-size:0.78rem;">+ Open 60s Pairing Window</button>
+      </div>
+      <div style="overflow-x: auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Appliance Name</th>
+              <th>MAC Address</th>
+              <th>Role</th>
+              <th>Priority</th>
+              <th>Permit Watts</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="applianceTable">
+            <tr>
+              <td colspan="6" style="text-align:center; color:var(--text-muted); padding:16px;">
+                No external appliances connected yet. Open pairing window to discover CraftThingy water pump or smart plugs.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Footer System Info -->
+    <footer>
+      <div>Device: <strong id="sysName">CraftThingy-Central-Control</strong> | Target: <span id="sysArch">ESP32</span></div>
+      <div>Core: <span id="sysCore">1.1.3</span> | App: <span id="sysApp">1.0.0</span> | Free Heap: <span id="sysHeap">--</span></div>
+      <div>Uptime: <span id="sysUptime">--</span></div>
+    </footer>
+  </div>
+
+  <script>
+    let pollTimer = null;
+    let isPaused = false;
+    const historyData = [];
+    const MAX_HISTORY = 60; // 60 data points
+
+    // Init canvas
+    const canvas = document.getElementById("powerChart");
+    const ctx = canvas.getContext("2d");
+
+    function resizeCanvas() {
+      canvas.width = canvas.parentElement.clientWidth * window.devicePixelRatio;
+      canvas.height = canvas.parentElement.clientHeight * window.devicePixelRatio;
+      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+    }
+    window.addEventListener("resize", resizeCanvas);
+    resizeCanvas();
+
+    function drawChart() {
+      const w = canvas.parentElement.clientWidth;
+      const h = canvas.parentElement.clientHeight;
+      ctx.clearRect(0, 0, w, h);
+
+      if (historyData.length < 2) return;
+
+      const maxWatts = 1400;
+
+      // Draw Ceiling Line (1170W)
+      const ceilingY = h - (1170 / maxWatts) * h;
+      ctx.strokeStyle = "rgba(245, 158, 11, 0.4)";
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(0, ceilingY);
+      ctx.lineTo(w, ceilingY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Draw 1300W Trip Line
+      const tripY = h - (1300 / maxWatts) * h;
+      ctx.strokeStyle = "rgba(239, 68, 68, 0.4)";
+      ctx.beginPath();
+      ctx.moveTo(0, tripY);
+      ctx.lineTo(w, tripY);
+      ctx.stroke();
+
+      // Draw Power Curve
+      ctx.beginPath();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "#38bdf8";
+
+      const step = w / (MAX_HISTORY - 1);
+      historyData.forEach((val, i) => {
+        const x = i * step;
+        const y = h - (Math.min(val, maxWatts) / maxWatts) * (h - 10);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+
+      // Area fill
+      ctx.lineTo((historyData.length - 1) * step, h);
+      ctx.lineTo(0, h);
+      ctx.closePath();
+      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, "rgba(56, 189, 248, 0.25)");
+      grad.addColorStop(1, "rgba(56, 189, 248, 0.0)");
+      ctx.fillStyle = grad;
+      ctx.fill();
+    }
+
+    async function fetchTelemetry() {
+      const host = document.getElementById("hostInput").value.trim();
+      const token = document.getElementById("keyInput").value.trim();
+
+      if (!host) return;
+
+      const statusPill = document.getElementById("statusPill");
+      const statusText = document.getElementById("statusText");
+
+      try {
+        const url = `http://${host}/api/v1/device/status?token=${encodeURIComponent(token)}`;
+        const res = await fetch(url, { cache: "no-store", headers: { "Accept": "application/json" } });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        const json = await res.json();
+        const data = json.data;
+
+        // Status pill
+        statusPill.className = "status-badge";
+        statusText.innerText = "ONLINE (1Hz)";
+
+        // AC Telemetry
+        const ac = data.ac || {};
+        const pwr = ac.power || 0.0;
+        document.getElementById("acPower").innerText = pwr.toFixed(1);
+        document.getElementById("acVolt").innerHTML = `${(ac.voltage || 0.0).toFixed(1)} <span style="font-size:0.75rem;">V</span>`;
+        document.getElementById("acCurr").innerHTML = `${(ac.current || 0.0).toFixed(3)} <span style="font-size:0.75rem;">A</span>`;
+        document.getElementById("acPf").innerText = (ac.powerFactor || 0.0).toFixed(2);
+        document.getElementById("acFreq").innerText = `${(ac.frequency || 0.0).toFixed(1)} Hz`;
+        document.getElementById("acEnergy").innerHTML = `${(ac.energy || 0.0).toFixed(3)} <span style="font-size:0.75rem;">kWh</span>`;
+
+        const acBadge = document.getElementById("acBadge");
+        if (ac.online) {
+          acBadge.className = "card-badge badge-online";
+          acBadge.innerText = "Online";
+        } else {
+          acBadge.className = "card-badge badge-offline";
+          acBadge.innerText = "Offline (Wait 220V)";
+        }
+
+        // Power Bar
+        const pct = Math.min((pwr / 1300.0) * 100, 100);
+        const powerBar = document.getElementById("powerBar");
+        powerBar.style.width = `${pct}%`;
+        if (pwr > 1170) {
+          powerBar.style.background = "var(--danger)";
+        } else if (pwr > 900) {
+          powerBar.style.background = "var(--warning)";
+        } else {
+          powerBar.style.background = "var(--success)";
+        }
+
+        // Chart history
+        historyData.push(pwr);
+        if (historyData.length > MAX_HISTORY) historyData.shift();
+        drawChart();
+
+        // Virtual MCB
+        const mcb = data.mcb || {};
+        const prof = data.profile || {};
+        const heatPct = mcb.thermalHeatPct || 0;
+        document.getElementById("mcbHeatText").innerText = `${heatPct}%`;
+        const mcbHeatBar = document.getElementById("mcbHeatBar");
+        mcbHeatBar.style.width = `${heatPct}%`;
+        mcbHeatBar.style.background = heatPct > 80 ? "var(--danger)" : (heatPct > 40 ? "var(--warning)" : "var(--success)");
+
+        document.getElementById("arbCeiling").innerHTML = `${(prof.effectiveCeilingWatts || 1170).toFixed(0)} <span style="font-size:0.75rem;">W</span>`;
+        document.getElementById("mcbTripTime").innerText = mcb.timeToTripSec < 9999 ? `${mcb.timeToTripSec}s` : "∞";
+
+        const mcbBadge = document.getElementById("mcbBadge");
+        if (mcb.isBreakerHot) {
+          mcbBadge.className = "card-badge badge-offline";
+          mcbBadge.innerText = "BREAKER HOT";
+        } else if (heatPct > 30) {
+          mcbBadge.className = "card-badge badge-warn";
+          mcbBadge.innerText = "Elevated";
+        } else {
+          mcbBadge.className = "card-badge badge-online";
+          mcbBadge.innerText = "Normal";
+        }
+
+        // Surge Alert
+        const surge = prof.surgeAlert || (pwr > (prof.effectiveCeilingWatts || 1170));
+        document.getElementById("surgeAlert").style.display = surge ? "flex" : "none";
+
+        // DC / INA226
+        const dc = data.battery || {};
+        document.getElementById("dcVolt").innerHTML = `${(dc.voltage || 0.0).toFixed(2)} <span style="font-size:0.75rem;">V</span>`;
+        document.getElementById("dcCurr").innerHTML = `${(dc.currentMa || 0.0).toFixed(1)} <span style="font-size:0.75rem;">mA</span>`;
+        document.getElementById("dcPower").innerHTML = `${(dc.powerMw || 0.0).toFixed(1)} <span style="font-size:0.75rem;">mW</span>`;
+        document.getElementById("dcSoc").innerHTML = `${(dc.socPct || 0)} <span style="font-size:0.75rem;">%</span>`;
+
+        const inaBadge = document.getElementById("inaBadge");
+        if (dc.online) {
+          inaBadge.className = "card-badge badge-online";
+          inaBadge.innerText = "Online (0x44)";
+        } else {
+          inaBadge.className = "card-badge badge-offline";
+          inaBadge.innerText = "Offline";
+        }
+
+        // SD Datalogger
+        const sd = data.sd || {};
+        const sdBadge = document.getElementById("sdBadge");
+        if (sd.mounted) {
+          sdBadge.className = "card-badge badge-online";
+          sdBadge.innerText = "Mounted";
+        } else {
+          sdBadge.className = "card-badge badge-offline";
+          sdBadge.innerText = "No Card";
+        }
+        document.getElementById("sdRecords").innerHTML = `${(sd.recordsToday || 0).toLocaleString()} <span style="font-size:0.75rem;">rows</span>`;
+        document.getElementById("sdFile").innerText = sd.logFile || "/logs/power_live.csv";
+        if (sd.totalMb) {
+          document.getElementById("sdStorage").innerText = `${(sd.totalMb - (sd.usedMb || 0))}MB free / ${sd.totalMb}MB`;
+        }
+
+        // Permits & Devices
+        const devList = data.devices || [];
+        document.getElementById("permitCount").innerText = prof.activePermits || devList.length;
+        const tbody = document.getElementById("applianceTable");
+        if (devList.length > 0) {
+          tbody.innerHTML = devList.map(d => `
+            <tr>
+              <td><strong>${d.name || "Device"}</strong></td>
+              <td><code>${d.mac || "--"}</code></td>
+              <td>${d.role || "generic"}</td>
+              <td><span class="card-badge badge-blue">Priority ${d.priority || 2}</span></td>
+              <td><strong>${(d.allocatedWatts || 0).toFixed(0)} W</strong></td>
+              <td><span class="card-badge badge-online">Permit Active</span></td>
+            </tr>
+          `).join("");
+        }
+
+        // Footer System stats
+        document.getElementById("sysUptime").innerText = formatUptime(json.uptime || 0);
+
+      } catch (err) {
+        statusPill.className = "status-badge error";
+        statusText.innerText = `Offline: ${err.message}`;
+      }
+    }
+
+    function formatUptime(sec) {
+      const h = Math.floor(sec / 3600);
+      const m = Math.floor((sec % 3600) / 60);
+      const s = sec % 60;
+      return `${h}h ${m}m ${s}s`;
+    }
+
+    async function openPairingWindow() {
+      const host = document.getElementById("hostInput").value.trim();
+      const token = document.getElementById("keyInput").value.trim();
+      const url = `http://${host}/api/v1/device/command?token=${encodeURIComponent(token)}`;
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ command: "open_pairing", payload: "60" })
+        });
+        const resJson = await res.json();
+        alert(resJson.data?.message || "Pairing window opened for 60 seconds!");
+      } catch (e) {
+        alert("Failed to open pairing window: " + e.message);
+      }
+    }
+
+    function togglePause() {
+      isPaused = !isPaused;
+      const btn = document.getElementById("btnPause");
+      if (isPaused) {
+        clearInterval(pollTimer);
+        btn.innerText = "Resume";
+        btn.style.background = "var(--success)";
+        btn.style.color = "#000";
+      } else {
+        startPolling();
+        btn.innerText = "Pause";
+        btn.style.background = "var(--card-inner)";
+        btn.style.color = "var(--text)";
+      }
+    }
+
+    function startPolling() {
+      clearInterval(pollTimer);
+      const ms = parseInt(document.getElementById("pollInterval").value) || 1000;
+      pollTimer = setInterval(fetchTelemetry, ms);
+      fetchTelemetry();
+    }
+
+    document.getElementById("pollInterval").addEventListener("change", () => {
+      if (!isPaused) startPolling();
+    });
+
+    // Start auto polling
+    startPolling();
+  </script>
+</body>
+</html>
+
