@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CraftThingy Central Control & 1300W Arbiter</title>
+  <style>
+    :root {
+      --bg: #0a0e17;
+      --card-bg: rgba(22, 30, 46, 0.85);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --card-hover: rgba(30, 41, 59, 0.95);
+      --accent: #0ea5e9;
+      --accent-hover: #38bdf8;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --purple: #8b5cf6;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      background-image: radial-gradient(circle at 50% 0%, rgba(14, 165, 233, 0.12) 0%, transparent 60%);
+      color: var(--text);
+      font-family: var(--font);
+      min-height: 100vh;
+      padding: 16px;
+      display: flex;
+      justify-content: center;
+    }
+    .app-container {
+      width: 100%;
+      max-width: 1200px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    /* Top Header */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--card-border);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand-icon {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, var(--accent), var(--purple));
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      font-weight: 700;
+      box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3);
+    }
+    .brand-text h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+    .brand-text p {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+    .system-badges {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .badge {
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--card-border);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .badge.online { color: var(--success); border-color: rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.1); }
+    .badge.danger { color: var(--danger); border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.1); }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+
+    /* Grid Sections */
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 16px;
+    }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+      gap: 16px;
+    }
+    @media (max-width: 600px) {
+      .grid-2, .grid-3 { grid-template-columns: 1fr; }
+    }
+
+    /* Cards */
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 18px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .card-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Telemetry Display */
+    .telemetry-hero {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 0;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 8px;
+    }
+    .telemetry-hero .val {
+      font-size: 2.8rem;
+      font-weight: 800;
+      letter-spacing: -1px;
+      line-height: 1;
+      color: var(--text);
+    }
+    .telemetry-hero .unit {
+      font-size: 1.1rem;
+      font-weight: 500;
+      color: var(--accent);
+      margin-left: 4px;
+    }
+    .telemetry-hero .sub {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-top: 6px;
+    }
+
+    .metrics-row {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+    .metric-tile {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .metric-tile .label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+    .metric-tile .number {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    /* Progress & Gauges */
+    .progress-bar-container {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .progress-label-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.8rem;
+    }
+    .progress-track {
+      width: 100%;
+      height: 10px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 5px;
+      overflow: hidden;
+      position: relative;
+    }
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      transition: width 0.3s ease, background 0.3s ease;
+      border-radius: 5px;
+    }
+    .progress-fill.safe { background: linear-gradient(90deg, var(--accent), var(--success)); }
+    .progress-fill.warn { background: linear-gradient(90deg, var(--warning), #f97316); }
+    .progress-fill.danger { background: linear-gradient(90deg, #f97316, var(--danger)); }
+
+    /* Power Profile Buttons */
+    .profile-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .btn-profile {
+      flex: 1 1 calc(33.33% - 8px);
+      min-width: 90px;
+      padding: 10px 8px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-align: center;
+    }
+    .btn-profile:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: var(--accent);
+    }
+    .btn-profile.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent-hover);
+      box-shadow: 0 2px 8px rgba(14, 165, 233, 0.4);
+    }
+
+    /* Action Buttons */
+    .btn {
+      padding: 8px 14px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      border: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-success { background: var(--success); color: #fff; }
+    .btn-success:hover { background: #059669; }
+    .btn-danger { background: var(--danger); color: #fff; }
+    .btn-danger:hover { background: #dc2626; }
+    .btn-warning { background: var(--warning); color: #111; }
+    .btn-warning:hover { background: #d97706; }
+    .btn-outline {
+      background: transparent;
+      border: 1px solid var(--card-border);
+      color: var(--text);
+    }
+    .btn-outline:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: var(--text-muted);
+    }
+
+    /* Device Card Items */
+    .device-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .device-item {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      transition: border-color 0.2s ease;
+    }
+    .device-item:hover { border-color: rgba(255, 255, 255, 0.15); }
+    .device-item.active-permit { border-color: rgba(16, 185, 129, 0.5); background: rgba(16, 185, 129, 0.04); }
+    .device-item.paused { border-color: rgba(245, 158, 11, 0.5); background: rgba(245, 158, 11, 0.04); }
+
+    .device-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .device-title-box {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .device-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.08);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+    .device-info h4 { font-size: 0.95rem; font-weight: 600; }
+    .device-info span { font-size: 0.75rem; color: var(--text-muted); }
+
+    .device-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      padding-top: 8px;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .device-select {
+      background: rgba(0, 0, 0, 0.4);
+      color: var(--text);
+      border: 1px solid var(--card-border);
+      padding: 6px 8px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+    }
+    .override-group {
+      margin-left: auto;
+      display: flex;
+      gap: 6px;
+    }
+
+    /* Toast Notification */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      padding: 12px 20px;
+      background: var(--card-hover);
+      border: 1px solid var(--accent);
+      border-radius: 8px;
+      color: #fff;
+      font-size: 0.85rem;
+      font-weight: 500;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.3s ease;
+      z-index: 1000;
+    }
+    #toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+
+<div class="app-container">
+  <!-- Header -->
+  <header>
+    <div class="brand">
+      <div class="brand-icon">⚡</div>
+      <div class="brand-text">
+        <h1>CraftThingy Central Control</h1>
+        <p id="sub-header">1300W Energy Arbiter & Device Super-Brain</p>
+      </div>
+    </div>
+    <div class="system-badges">
+      <div class="badge online" id="status-badge"><span class="dot"></span> Online</div>
+      <div class="badge" id="ip-badge">IP: --</div>
+      <div class="badge" id="uptime-badge">Uptime: --</div>
+      <div class="badge" id="sd-badge">SD: Checking...</div>
+    </div>
+  </header>
+
+  <!-- Grid Row 1: Telemetry & Arbiter -->
+  <div class="grid-3">
+    <!-- Card 1: AC Grid Meter (PZEM-004T) -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">⚡ AC Mains (Pre-MCB Grid)</span>
+        <span class="badge online" id="pzem-status">PZEM OK</span>
+      </div>
+      <div class="telemetry-hero">
+        <div>
+          <span class="val" id="ac-voltage">--</span>
+          <span class="unit">V</span>
+        </div>
+        <div class="sub" id="ac-grid-desc">PLN 220V - 230V Reference Band (207V - 253V)</div>
+      </div>
+      <div class="metrics-row">
+        <div class="metric-tile">
+          <span class="label">Current (A)</span>
+          <span class="number" id="ac-current">--</span>
+        </div>
+        <div class="metric-tile">
+          <span class="label">Active Power (W)</span>
+          <span class="number" id="ac-power">--</span>
+        </div>
+        <div class="metric-tile">
+          <span class="label">Frequency (Hz)</span>
+          <span class="number" id="ac-freq">--</span>
+        </div>
+        <div class="metric-tile">
+          <span class="label">Power Factor</span>
+          <span class="number" id="ac-pf">--</span>
+        </div>
+      </div>
+      <div style="font-size: 0.8rem; color: var(--text-muted); display:flex; justify-content:space-between;">
+        <span>Cumulative Energy:</span>
+        <strong style="color: var(--text);" id="ac-energy">-- kWh</strong>
+      </div>
+    </div>
+
+    <!-- Card 2: 1300W Power Arbiter & MCB Thermal Model -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">🛡️ 1300W Ceiling Arbiter</span>
+        <span class="badge" id="arbiter-preset-name">PLN 1300VA</span>
+      </div>
+      
+      <!-- Power Gauge -->
+      <div class="progress-bar-container">
+        <div class="progress-label-row">
+          <span>Continuous Grid Load</span>
+          <span id="load-pct-text">0% (0 / 1170 W)</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill safe" id="load-progress"></div>
+        </div>
+      </div>
+
+      <!-- Virtual MCB Thermal Heat Model -->
+      <div class="progress-bar-container">
+        <div class="progress-label-row">
+          <span>Virtual Breaker Heat (I²t)</span>
+          <span id="mcb-heat-text">0% Cold</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill safe" id="mcb-heat-progress"></div>
+        </div>
+      </div>
+
+      <!-- Switchable Power Profiles -->
+      <div>
+        <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 6px;">ONE-TAP POWER PRESETS:</div>
+        <div class="profile-buttons">
+          <button class="btn-profile" onclick="setProfile(0)">450 W</button>
+          <button class="btn-profile" onclick="setProfile(1)">900 W</button>
+          <button class="btn-profile active" id="prof-btn-2" onclick="setProfile(2)">1300 W ★</button>
+          <button class="btn-profile" onclick="setProfile(3)">2200 W</button>
+          <button class="btn-profile" onclick="setProfile(5)">Inverter</button>
+          <button class="btn-profile" onclick="promptCustomWatts()">Custom</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Card 3: DC Sensor (INA226) & MicroSD Blackbox -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">🔋 DC Battery & Hub Health</span>
+        <span class="badge online" id="dc-status">INA226 OK</span>
+      </div>
+      <div class="telemetry-hero">
+        <div>
+          <span class="val" id="dc-voltage">--</span>
+          <span class="unit">V</span>
+        </div>
+        <div class="sub" id="dc-soc-text">Backup Battery SoC: 100%</div>
+      </div>
+      <div class="metrics-row">
+        <div class="metric-tile">
+          <span class="label">Discharge Current</span>
+          <span class="number" id="dc-current">-- mA</span>
+        </div>
+        <div class="metric-tile">
+          <span class="label">DC Power</span>
+          <span class="number" id="dc-power">-- mW</span>
+        </div>
+      </div>
+
+      <div style="padding-top: 8px; border-top: 1px solid var(--card-border); display: flex; flex-direction: column; gap: 8px;">
+        <div style="font-size: 0.8rem; color: var(--text-muted); display:flex; justify-content:space-between;">
+          <span>8GB SD Datalogger:</span>
+          <span id="sd-records-text">-- records</span>
+        </div>
+        <div style="display:flex; gap: 8px;">
+          <a class="btn btn-outline" style="flex:1; text-decoration:none;" href="/api/v1/sd/download?path=/logs/power_live.csv" download>
+            📥 Download CSV
+          </a>
+          <button class="btn btn-outline" onclick="openPairingGate(60)">
+            🔑 Pair (60s)
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 2: Appliance Priority Hierarchy & Manual Overrides -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">📱 Paired Appliances & Siphoning Control</span>
+      <div style="display: flex; gap: 8px;">
+        <button class="btn btn-primary" onclick="scanNetworkNodes()">
+          🔍 Scan Subnet / Discover
+        </button>
+      </div>
+    </div>
+
+    <div id="discovered-nodes-box" style="display: none; background: rgba(14, 165, 233, 0.08); border: 1px solid var(--accent); border-radius: 8px; padding: 12px; margin-bottom: 12px;">
+      <h4 style="font-size: 0.9rem; margin-bottom: 8px; color: var(--accent);">Discovered Devices on Network:</h4>
+      <div id="discovered-list" style="display:flex; flex-direction:column; gap:6px;"></div>
+    </div>
+
+    <div class="device-list" id="device-list">
+      <div style="color: var(--text-muted); font-size: 0.85rem; padding: 16px 0; text-align: center;">
+        No appliances registered yet. Click <strong>"Scan Subnet / Discover"</strong> or open the 60-second pairing gate to adopt a node.
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 3: SD Web File Manager / Hot-Reload -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">📁 SD Card Web App Hot-Reload & File Manager</span>
+      <button class="btn btn-outline" onclick="loadSdFiles()">🔄 Refresh SD Files</button>
+    </div>
+    <p style="font-size: 0.85rem; color: var(--text-muted);">
+      This web application is served directly from the <strong>8GB MicroSD Card</strong> (<code>/www/index.html</code>). You can edit this file and upload it live below for <strong>instant, zero-rebuild web updates!</strong>
+    </p>
+    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+      <input type="file" id="ui-file-input" accept=".html,.css,.js,.json" style="font-size: 0.85rem; color: var(--text-muted);">
+      <button class="btn btn-success" onclick="uploadUiToSd()">📤 Deploy File to SD (/www/)</button>
+      <button class="btn btn-danger" style="margin-left: auto;" onclick="rebootHub()">🔄 Reboot Hub</button>
+    </div>
+    <div id="sd-files-container" style="font-size: 0.8rem; color: var(--text-muted); margin-top: 8px;"></div>
+  </div>
+</div>
+
+<div id="toast">Action notification</div>
+
+<script>
+  let BASE_URL = window.location.origin;
+  if (!BASE_URL || BASE_URL.includes("null") || BASE_URL.startsWith("file:")) {
+    BASE_URL = "http://192.168.2.148";
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById("toast");
+    t.innerText = msg;
+    t.classList.add("show");
+    setTimeout(() => t.classList.remove("show"), 3200);
+  }
+
+  async function fetchStatus() {
+    try {
+      const res = await fetch(`${BASE_URL}/api/v1/device/status`);
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const json = await res.json();
+      renderStatus(json);
+    } catch (e) {
+      document.getElementById("status-badge").className = "badge danger";
+      document.getElementById("status-badge").innerHTML = '<span class="dot"></span> Offline';
+    }
+  }
+
+  function renderStatus(json) {
+    document.getElementById("status-badge").className = "badge online";
+    document.getElementById("status-badge").innerHTML = '<span class="dot"></span> Online';
+    
+    // Header badges
+    document.getElementById("ip-badge").innerText = `IP: ${window.location.hostname || "192.168.2.148"}`;
+    if (json.uptime) {
+      const s = json.uptime;
+      const h = Math.floor(s / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      document.getElementById("uptime-badge").innerText = `Uptime: ${h}h ${m}m ${s % 60}s`;
+    }
+
+    const d = json.data || {};
+
+    // AC Mains
+    if (d.ac) {
+      document.getElementById("ac-voltage").innerText = d.ac.voltage.toFixed(1);
+      document.getElementById("ac-current").innerText = d.ac.current.toFixed(3);
+      document.getElementById("ac-power").innerText = d.ac.power.toFixed(1);
+      document.getElementById("ac-freq").innerText = d.ac.frequency.toFixed(1);
+      document.getElementById("ac-pf").innerText = d.ac.powerFactor.toFixed(2);
+      document.getElementById("ac-energy").innerText = `${d.ac.energy.toFixed(3)} kWh`;
+
+      if (d.ac.voltage > 240) {
+        document.getElementById("ac-grid-desc").innerText = `PLN Off-Peak High Line (~${d.ac.voltage.toFixed(0)}V, Standard IEC 207-253V)`;
+      } else {
+        document.getElementById("ac-grid-desc").innerText = `PLN Normal Grid Voltage (Standard IEC 207-253V)`;
+      }
+    }
+
+    // 1300W Arbiter & MCB
+    if (d.profile) {
+      document.getElementById("arbiter-preset-name").innerText = d.profile.name;
+      const maxW = d.profile.effectiveCeilingWatts || 1170;
+      const curW = d.ac ? d.ac.power : 0;
+      const pct = Math.min(100, Math.round((curW / maxW) * 100));
+
+      document.getElementById("load-pct-text").innerText = `${pct}% (${curW.toFixed(0)} / ${maxW.toFixed(0)} W)`;
+      const fill = document.getElementById("load-progress");
+      fill.style.width = `${pct}%`;
+      fill.className = pct > 90 ? "progress-fill danger" : (pct > 75 ? "progress-fill warn" : "progress-fill safe");
+
+      // Update active profile button
+      for (let i = 0; i <= 5; i++) {
+        const btn = document.getElementById(`prof-btn-${i}`);
+        if (btn) btn.classList.toggle("active", d.profile.preset === i);
+      }
+    }
+
+    if (d.mcb) {
+      const heat = d.mcb.thermalHeatPct || 0;
+      document.getElementById("mcb-heat-text").innerText = `${heat}% ${d.mcb.isBreakerHot ? "HOT (Throttling)" : "Normal"}`;
+      const heatFill = document.getElementById("mcb-heat-progress");
+      heatFill.style.width = `${heat}%`;
+      heatFill.className = heat > 80 ? "progress-fill danger" : (heat > 50 ? "progress-fill warn" : "progress-fill safe");
+    }
+
+    // DC Battery & SD
+    if (d.battery) {
+      document.getElementById("dc-voltage").innerText = d.battery.voltage.toFixed(2);
+      document.getElementById("dc-current").innerText = d.battery.currentMa.toFixed(1);
+      document.getElementById("dc-power").innerText = d.battery.powerMw.toFixed(0);
+      document.getElementById("dc-soc-text").innerText = `Backup Battery SoC: ${d.battery.socPct}%`;
+    }
+
+    if (d.sd) {
+      document.getElementById("sd-badge").innerText = d.sd.mounted ? `SD: ${d.sd.totalMb - d.sd.usedMb}MB Free` : "SD: Unmounted";
+      document.getElementById("sd-records-text").innerText = `${d.sd.recordsToday} records (${d.sd.errors} err)`;
+    }
+
+    // Render registered devices
+    renderDevices(d.devices || []);
+  }
+
+  function renderDevices(devs) {
+    const list = document.getElementById("device-list");
+    if (!devs || devs.length === 0) {
+      list.innerHTML = `<div style="color: var(--text-muted); font-size: 0.85rem; padding: 16px 0; text-align: center;">
+        No appliances registered yet. Click <strong>"Scan Subnet / Discover"</strong> to locate nodes.
+      </div>`;
+      return;
+    }
+
+    list.innerHTML = devs.map(dev => {
+      let stateClass = "";
+      let stateLabel = "STANDBY";
+      if (dev.activePermit) { stateClass = "active-permit"; stateLabel = "ACTIVE PERMIT (Running)"; }
+      else if (!dev.online) { stateLabel = "OFFLINE"; }
+
+      const isWaterPump = dev.role === "water_pump";
+
+      return `
+        <div class="device-item ${stateClass}">
+          <div class="device-header">
+            <div class="device-title-box">
+              <div class="device-icon">${isWaterPump ? '💧' : '🔌'}</div>
+              <div class="device-info">
+                <h4>${dev.name || dev.role}</h4>
+                <span>MAC: ${dev.mac} | IP: ${dev.ip || '--'} | State: <strong>${stateLabel}</strong></span>
+              </div>
+            </div>
+            <div style="display:flex; gap: 6px;">
+              <span class="badge ${dev.online ? 'online' : 'danger'}">${dev.online ? 'Online' : 'Offline'}</span>
+              <button class="btn btn-outline" style="padding:4px 8px; font-size:0.75rem;" onclick="quarantineDevice('${dev.mac}')">Revoke</button>
+            </div>
+          </div>
+
+          <div class="device-controls">
+            <label style="font-size:0.8rem; color:var(--text-muted);">Priority:</label>
+            <select class="device-select" onchange="updateDevicePriority('${dev.mac}', this.value, ${dev.ratedWatts}, ${dev.pausable})">
+              <option value="1" ${dev.priority == 1 ? 'selected' : ''}>1. Critical (Instant/Siphon)</option>
+              <option value="2" ${dev.priority == 2 ? 'selected' : ''}>2. High Priority</option>
+              <option value="3" ${dev.priority == 3 ? 'selected' : ''}>3. Normal (Deferrable)</option>
+              <option value="4" ${dev.priority == 4 ? 'selected' : ''}>4. Low / Deferrable</option>
+            </select>
+
+            <label style="font-size:0.8rem; color:var(--text-muted); margin-left:10px;">Pausable:</label>
+            <input type="checkbox" ${dev.pausable ? 'checked' : ''} onchange="updateDevicePriority('${dev.mac}', ${dev.priority}, ${dev.ratedWatts}, this.checked)">
+
+            <div class="override-group">
+              <button class="btn btn-success" style="padding:4px 8px; font-size:0.75rem;" onclick="overrideDevice('${dev.mac}', '${dev.ip}', 'start')">Force ON</button>
+              <button class="btn btn-danger" style="padding:4px 8px; font-size:0.75rem;" onclick="overrideDevice('${dev.mac}', '${dev.ip}', 'stop')">Force OFF</button>
+              <button class="btn btn-outline" style="padding:4px 8px; font-size:0.75rem;" onclick="overrideDevice('${dev.mac}', '${dev.ip}', 'auto')">Auto Mode</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  async function postCommand(cmd, payload = "") {
+    try {
+      const res = await fetch(`${BASE_URL}/api/v1/device/command`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cmd, payload })
+      });
+      const data = await res.json();
+      showToast(data.message || "Command executed");
+      fetchStatus();
+    } catch (e) {
+      showToast("Error executing command: " + e.message);
+    }
+  }
+
+  function setProfile(preset) {
+    postCommand("set_profile", String(preset));
+  }
+
+  function promptCustomWatts() {
+    const w = prompt("Enter continuous power ceiling in Watts:", "1500");
+    if (w && !isNaN(w)) {
+      postCommand("set_custom_watts", String(w));
+    }
+  }
+
+  function openPairingGate(seconds = 60) {
+    postCommand("open_pairing", String(seconds));
+  }
+
+  async function scanNetworkNodes() {
+    showToast("Scanning subnet via mDNS & local probes...");
+    try {
+      const res = await fetch(`${BASE_URL}/api/v1/device/command`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cmd: "discover_nodes", payload: "" })
+      });
+      const data = await res.json();
+      const disc = (data.discovered || (data.data && data.data.discovered)) || [];
+      const box = document.getElementById("discovered-nodes-box");
+      const list = document.getElementById("discovered-list");
+
+      if (disc.length === 0) {
+        box.style.display = "block";
+        list.innerHTML = `<span style="font-size:0.8rem; color:var(--text-muted);">No unadopted nodes responding on mDNS. Ensure device is powered on.</span>`;
+        return;
+      }
+
+      box.style.display = "block";
+      list.innerHTML = disc.map(node => `
+        <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.3); padding:8px 12px; border-radius:6px;">
+          <div>
+            <strong>${node.host}</strong> (${node.ip}:${node.port})
+            <span style="font-size:0.75rem; color:var(--text-muted); margin-left:8px;">${node.isPaired ? 'Already Paired' : 'Unadopted'}</span>
+          </div>
+          ${!node.isPaired ? `<button class="btn btn-primary" style="padding:4px 8px; font-size:0.75rem;" onclick="adoptNode('${node.ip}', '${node.host}')">Pair Node</button>` : ''}
+        </div>
+      `).join("");
+    } catch (e) {
+      showToast("Discovery error: " + e.message);
+    }
+  }
+
+  function adoptNode(ip, host) {
+    const role = host.includes("pump") ? "water_pump" : "appliance";
+    const name = host.replace(/-/g, " ");
+    postCommand("register_device", JSON.stringify({
+      mac: ip,
+      name: name,
+      role: role,
+      ip: ip,
+      priority: 1,
+      watts: 550,
+      pausable: false
+    }));
+  }
+
+  function updateDevicePriority(mac, priority, watts, pausable) {
+    postCommand("update_priority", JSON.stringify({
+      mac: mac,
+      priority: parseInt(priority),
+      watts: parseFloat(watts),
+      pausable: pausable === true || pausable === "true"
+    }));
+  }
+
+  function overrideDevice(mac, ip, action) {
+    postCommand("override_device", JSON.stringify({
+      mac: mac,
+      ip: ip,
+      action: action
+    }));
+  }
+
+  function quarantineDevice(mac) {
+    if (confirm("Revoke authorization and remove this device from Central Control?")) {
+      postCommand("remove_device", JSON.stringify({ mac: mac }));
+    }
+  }
+
+  async function loadSdFiles() {
+    try {
+      const res = await fetch(`${BASE_URL}/api/v1/sd/list?dir=/www`);
+      const data = await res.json();
+      const cont = document.getElementById("sd-files-container");
+      if (data.files && data.files.length > 0) {
+        cont.innerHTML = "<strong>Files in /www/:</strong> " + data.files.map(f => `${f.name} (${f.size} B)`).join(", ");
+      } else {
+        cont.innerHTML = "No files found in /www/ yet.";
+      }
+    } catch (e) {
+      document.getElementById("sd-files-container").innerText = "Failed to list SD files: " + e.message;
+    }
+  }
+
+  async function uploadUiToSd() {
+    const fileInput = document.getElementById("ui-file-input");
+    if (!fileInput.files || fileInput.files.length === 0) {
+      alert("Please select an HTML/CSS/JS file to deploy.");
+      return;
+    }
+    const file = fileInput.files[0];
+    const targetPath = "/www/" + file.name;
+    const text = await file.text();
+
+    showToast("Deploying " + targetPath + " to SD card...");
+    try {
+      const form = new URLSearchParams();
+      form.append("path", targetPath);
+      form.append("content", text);
+
+      const res = await fetch(`${BASE_URL}/api/v1/sd/write`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: form.toString()
+      });
+      const data = await res.json();
+      if (data.status === "success") {
+        showToast("Success! " + targetPath + " uploaded (" + data.bytes + " bytes)");
+        loadSdFiles();
+      } else {
+        alert("Upload failed: " + (data.message || "Unknown error"));
+      }
+    } catch (e) {
+      alert("Upload error: " + e.message);
+    }
+  }
+
+  function rebootHub() {
+    if (confirm("Reboot Central Control ESP32 Hub?")) {
+      fetch(`${BASE_URL}/api/v1/system/reboot`, { method: "POST" });
+      showToast("Hub rebooting... Page will reload in 5s.");
+      setTimeout(() => location.reload(), 5000);
+    }
+  }
+
+  // Periodic Polling
+  fetchStatus();
+  setInterval(fetchStatus, 1000);
+  setTimeout(loadSdFiles, 1500);
+</script>
+
+</body>
+</html>
