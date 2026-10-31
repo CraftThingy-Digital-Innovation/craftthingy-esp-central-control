@@ -398,8 +398,8 @@ public:
     }
 
     bool isSafeToUpdate() const override {
-        // Safe to update if no emergency surge is underway
-        return !_arbiter.isSurgeAlertActive();
+        // Safe to update as long as no active power permit is in flight
+        return _arbiter.getActivePermitCount() == 0;
     }
 
     void prepareForUpdate() override {
