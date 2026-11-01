@@ -1307,10 +1307,17 @@
   // --------------------------------------------------------------------------
   // Appliance Power Characteristic & Inrush Fingerprint Drawer
   // --------------------------------------------------------------------------
+  const activeCurveDrawers = new Set();
+
   function toggleInrushCurve(cleanMac) {
+    if (activeCurveDrawers.has(cleanMac)) {
+      activeCurveDrawers.delete(cleanMac);
+    } else {
+      activeCurveDrawers.add(cleanMac);
+    }
     const box = document.getElementById(`curve-box-${cleanMac}`);
     if (box) {
-      box.classList.toggle("active");
+      box.classList.toggle("active", activeCurveDrawers.has(cleanMac));
     }
   }
 
@@ -1594,8 +1601,18 @@
       return;
     }
 
-    list.innerHTML = devs.map(dev => {
+    // Remove empty notice if present
+    const emptyNotice = list.querySelector("div[style*='text-align: center']");
+    if (emptyNotice) {
+      list.innerHTML = "";
+    }
+
+    const currentCleanMacs = new Set();
+
+    devs.forEach(dev => {
       const cleanMac = getCleanMacId(dev.mac);
+      currentCleanMacs.add(cleanMac);
+
       const cached = satelliteTelemetryCache[dev.mac];
       const d = (cached && cached.data && cached.data.device) || {};
 
@@ -1626,14 +1643,16 @@
         }
       }
 
-      return `
-        <div class="device-item ${stateClass}">
+      let card = document.getElementById(`device-card-${cleanMac}`);
+      if (!card) {
+        const cardHtml = `
+        <div id="device-card-${cleanMac}" class="device-item ${stateClass}">
           <div class="device-header">
             <div class="device-title-box">
               <div class="device-icon">${isWaterPump ? '💧' : '🔌'}</div>
               <div class="device-info">
                 <h4>${dev.name || dev.role}</h4>
-                <span>MAC: ${dev.mac} | IP: ${dev.ip || '--'} | Signal: ${dev.rssi || -60} dBm | Base: <strong>${dev.ratedWatts.toFixed(0)}W</strong></span>
+                <span id="subinfo-${cleanMac}">MAC: ${dev.mac} | IP: ${dev.ip || '--'} | Signal: ${dev.rssi || -60} dBm | Base: <strong>${dev.ratedWatts.toFixed(0)}W</strong></span>
               </div>
             </div>
             <div style="display:flex; gap: 6px; align-items:center;">
@@ -1648,7 +1667,7 @@
 
           <div class="device-controls">
             <label style="font-size:0.8rem; color:var(--text-muted);">Priority:</label>
-            <select class="device-select" onchange="updateDevicePriority('${dev.mac}', this.value, ${dev.ratedWatts}, ${dev.pausable})">
+            <select id="priority-${cleanMac}" class="device-select" onchange="updateDevicePriority('${dev.mac}', this.value, ${dev.ratedWatts}, document.getElementById('pausable-${cleanMac}').checked)">
               <option value="1" ${dev.priority == 1 ? 'selected' : ''}>1. Critical (Instant/Siphon)</option>
               <option value="2" ${dev.priority == 2 ? 'selected' : ''}>2. High Priority</option>
               <option value="3" ${dev.priority == 3 ? 'selected' : ''}>3. Normal (Deferrable)</option>
@@ -1656,7 +1675,7 @@
             </select>
 
             <label style="font-size:0.8rem; color:var(--text-muted); margin-left:10px;">Pausable:</label>
-            <input type="checkbox" ${dev.pausable ? 'checked' : ''} onchange="updateDevicePriority('${dev.mac}', ${dev.priority}, ${dev.ratedWatts}, this.checked)">
+            <input type="checkbox" id="pausable-${cleanMac}" ${dev.pausable ? 'checked' : ''} onchange="updateDevicePriority('${dev.mac}', document.getElementById('priority-${cleanMac}').value, ${dev.ratedWatts}, this.checked)">
 
             <div class="override-group">
               <button class="btn btn-outline" style="padding:4px 8px; font-size:0.75rem;" onclick="toggleInrushCurve('${cleanMac}')">📊 Power Curve</button>
@@ -1668,7 +1687,7 @@
           </div>
 
           <!-- Interactive Power Curve & Inrush Fingerprint Drawer -->
-          <div id="curve-box-${cleanMac}" class="inrush-curve-box">
+          <div id="curve-box-${cleanMac}" class="inrush-curve-box ${activeCurveDrawers.has(cleanMac) ? 'active' : ''}">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
               <strong style="color:var(--accent); font-size:0.85rem;">📈 Motor Power Characteristic & Inrush Surge Profile:</strong>
               <span style="font-size:0.72rem; color:var(--text-muted);">Calibrated Profile &bull; 1300W Virtual MCB Safe</span>
@@ -1716,8 +1735,59 @@
             </div>
           </div>
         </div>
-      `;
-    }).join("");
+        `;
+        list.insertAdjacentHTML("beforeend", cardHtml);
+      } else {
+        // In-place non-destructive reconciliation
+        card.className = `device-item ${stateClass}`;
+
+        const subinfo = document.getElementById(`subinfo-${cleanMac}`);
+        if (subinfo) {
+          subinfo.innerHTML = `MAC: ${dev.mac} | IP: ${dev.ip || '--'} | Signal: ${dev.rssi || -60} dBm | Base: <strong>${dev.ratedWatts.toFixed(0)}W</strong>`;
+        }
+
+        const badge = document.getElementById(`badge-${cleanMac}`);
+        if (badge) {
+          badge.className = `badge ${stateBadgeClass}`;
+          badge.innerText = stateLabel;
+        }
+
+        const telemBox = document.getElementById(`telem-box-${cleanMac}`);
+        if (telemBox) {
+          telemBox.innerHTML = renderTelemetryHtml(dev, cached);
+        }
+
+        const rstBtn = document.getElementById(`btn-reset-${cleanMac}`);
+        if (rstBtn) {
+          rstBtn.style.display = d.dryRunAlarm ? "inline-flex" : "none";
+        }
+
+        const prioritySelect = document.getElementById(`priority-${cleanMac}`);
+        if (prioritySelect && document.activeElement !== prioritySelect) {
+          prioritySelect.value = String(dev.priority);
+        }
+
+        const pausableCheckbox = document.getElementById(`pausable-${cleanMac}`);
+        if (pausableCheckbox && document.activeElement !== pausableCheckbox) {
+          pausableCheckbox.checked = !!dev.pausable;
+        }
+
+        const curveBox = document.getElementById(`curve-box-${cleanMac}`);
+        if (curveBox) {
+          curveBox.classList.toggle("active", activeCurveDrawers.has(cleanMac));
+        }
+      }
+    });
+
+    // Prune devices that were removed/quarantined
+    Array.from(list.children).forEach(child => {
+      if (child.id && child.id.startsWith("device-card-")) {
+        const childCleanMac = child.id.replace("device-card-", "");
+        if (!currentCleanMacs.has(childCleanMac)) {
+          child.remove();
+        }
+      }
+    });
   }
 
   const DEFAULT_KEY = "a1b2c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff00";
