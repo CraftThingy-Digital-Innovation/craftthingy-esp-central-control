@@ -1107,49 +1107,105 @@
         try { disc = JSON.parse(data.data.message).discovered || []; } catch(e){}
       }
 
+      // Deduplicate by IP or MAC
+      const seen = new Set();
+      const uniqueDisc = [];
+      for (const node of disc) {
+        const key = node.mac || node.ip;
+        if (key && !seen.has(key)) {
+          seen.add(key);
+          uniqueDisc.push(node);
+        }
+      }
+
       const box = document.getElementById("discovered-nodes-box");
       const list = document.getElementById("discovered-list");
 
-      if (disc.length === 0) {
+      if (uniqueDisc.length === 0) {
         box.style.display = "block";
         list.innerHTML = `<span style="font-size:0.8rem; color:var(--text-muted);">No unadopted nodes responding on mDNS. Ensure device is powered on.</span>`;
         return;
       }
 
       box.style.display = "block";
-      list.innerHTML = disc.map(node => `
-        <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.3); padding:8px 12px; border-radius:6px;">
-          <div>
-            <strong>${node.name || node.host}</strong> (${node.ip}:${node.port || 80})
-            <span style="font-size:0.75rem; color:${node.autoAdopted ? 'var(--success)' : 'var(--text-muted)'}; margin-left:8px;">
-              ${node.autoAdopted ? '✅ Auto-Adopted' : (node.isPaired ? 'Already Paired' : 'Discovered')}
-            </span>
+      list.innerHTML = uniqueDisc.map(node => {
+        const safeId = (node.mac || node.ip).replace(/[^a-zA-Z0-9]/g, "_");
+        const defaultWatts = node.role === "water_pump" ? 280 : 500;
+        const defaultPrio = node.role === "water_pump" ? 2 : 3;
+
+        if (node.isPaired) {
+          return `
+            <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.3); padding:8px 12px; border-radius:6px; margin-bottom:6px;">
+              <div>
+                <strong>${node.name || node.host}</strong> (${node.ip})
+                <span style="font-size:0.75rem; color:var(--text-muted); margin-left:8px;">MAC: ${node.mac || '--'}</span>
+              </div>
+              <span class="badge online" style="font-size:0.75rem;">Already Paired</span>
+            </div>
+          `;
+        }
+
+        return `
+          <div style="background:rgba(14, 165, 233, 0.06); border:1px solid rgba(14, 165, 233, 0.25); padding:10px 14px; border-radius:8px; margin-bottom:8px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+              <div>
+                <strong style="font-size:0.95rem; color:var(--accent);">${node.name || node.host}</strong>
+                <div style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">
+                  Role: <strong>${node.role || 'appliance'}</strong> | IP: <strong>${node.ip}</strong> | MAC: <strong>${node.mac || node.ip}</strong>
+                </div>
+              </div>
+              <span class="badge" style="background:rgba(14, 165, 233, 0.15); color:var(--accent); border-color:var(--accent);">Ready to Pair</span>
+            </div>
+
+            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-size:0.8rem; background:rgba(0,0,0,0.2); padding:8px 10px; border-radius:6px;">
+              <label>Priority:
+                <select id="prio-${safeId}" style="background:var(--bg); color:var(--text); border:1px solid var(--card-border); border-radius:4px; padding:2px 6px; font-size:0.8rem;">
+                  <option value="1">1 - Critical (Never Shed)</option>
+                  <option value="2" ${defaultPrio === 2 ? 'selected' : ''}>2 - High (Water Pump)</option>
+                  <option value="3" ${defaultPrio === 3 ? 'selected' : ''}>3 - Normal (Pausable)</option>
+                  <option value="4">4 - Deferrable</option>
+                </select>
+              </label>
+
+              <label>Continuous Watts:
+                <input type="number" id="watts-${safeId}" value="${defaultWatts}" style="width:75px; background:var(--bg); color:var(--text); border:1px solid var(--card-border); border-radius:4px; padding:2px 6px; font-size:0.8rem;">
+              </label>
+
+              <button class="btn btn-primary" style="padding:4px 12px; font-size:0.8rem; margin-left:auto;" 
+                onclick="adoptDiscoveredNode('${node.ip}', '${node.mac || node.ip}', '${node.name || node.host}', '${node.role || 'appliance'}', '${safeId}')">
+                ➕ Pair Appliance
+              </button>
+            </div>
           </div>
-          <span class="badge online" style="font-size:0.75rem;">${node.role || 'Active'}</span>
-        </div>
-      `).join("");
-      showToast(`Auto-discovered and paired ${disc.length} appliance(s)!`);
-      fetchStatus();
+        `;
+      }).join("");
+
+      showToast(`Found ${uniqueDisc.length} device(s) on network.`);
     } catch (e) {
       showToast("Discovery error: " + e.message);
     }
   }
-      showToast("Discovery error: " + e.message);
-    }
-  }
 
-  function adoptNode(ip, host) {
-    const role = host.includes("pump") ? "water_pump" : "appliance";
-    const name = host.replace(/-/g, " ");
+  function adoptDiscoveredNode(ip, mac, name, role, safeId) {
+    const prioEl = document.getElementById(`prio-${safeId}`);
+    const wattsEl = document.getElementById(`watts-${safeId}`);
+    const priority = prioEl ? parseInt(prioEl.value) : 2;
+    const watts = wattsEl ? parseFloat(wattsEl.value) : 280;
+
     postCommand("register_device", JSON.stringify({
-      mac: ip,
+      mac: mac,
       name: name,
       role: role,
       ip: ip,
-      priority: 1,
-      watts: 550,
-      pausable: false
+      priority: priority,
+      watts: watts,
+      pausable: true
     }));
+    showToast(`Pairing ${name} (${ip}) with priority ${priority}...`);
+    setTimeout(() => {
+      scanNetworkNodes();
+      fetchStatus();
+    }, 1200);
   }
 
   function updateDevicePriority(mac, priority, watts, pausable) {
