@@ -36,8 +36,8 @@ import urllib.parse
 from datetime import datetime, timezone, timedelta
 from typing import Tuple, Optional, Dict, Any
 
-TOOL_VERSION = "1.1.7"
-CORE_VERSION = "1.1.2"
+TOOL_VERSION = "1.1.0"
+CORE_VERSION = "1.1.4"
 
 if hasattr(sys.stdout, "reconfigure"):
     try:
@@ -67,7 +67,7 @@ KEY_FILE = os.path.join(SCRIPT_DIR, "rescue_key.pem")
 
 # Detect context: if placed in craftthingy-esp-core-ota, default target is core
 _repo_name = os.path.basename(os.path.dirname(SCRIPT_DIR)).lower()
-DEFAULT_TARGET = "core" if "core" in _repo_name else "water_pump"
+DEFAULT_TARGET = "central_control" if "central" in _repo_name else ("core" if "core" in _repo_name else "water_pump")
 
 
 def find_firmware_binary(custom_bin: Optional[str] = None, tag: Optional[str] = None, target: str = "core") -> str:
