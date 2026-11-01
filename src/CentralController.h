@@ -136,9 +136,13 @@ public:
             uint8_t count = 0;
             const RegisteredAppliance* devs = _arbiter.getDevices(count);
             for (uint8_t i = 0; i < count; i++) {
-                if (strlen(devs[i].ip) > 0 && strcmp(devs[i].ip, "--") != 0 && strcmp(devs[i].ip, "0.0.0.0") != 0) {
+                // Only poll online devices to prevent TCP connect stall on offline IPs
+                if (devs[i].isOnline && strlen(devs[i].ip) > 0 && strcmp(devs[i].ip, "--") != 0 && strcmp(devs[i].ip, "0.0.0.0") != 0) {
+                    WiFiClient client;
+                    client.setTimeout(1);
                     HTTPClient http;
-                    http.begin("http://" + String(devs[i].ip) + "/api/v1/system/status");
+                    http.setConnectTimeout(350);
+                    http.begin(client, "http://" + String(devs[i].ip) + "/api/v1/system/status");
                     http.setTimeout(450);
                     int code = http.GET();
                     if (code == 200) {

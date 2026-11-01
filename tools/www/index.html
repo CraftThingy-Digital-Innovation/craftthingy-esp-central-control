@@ -1436,8 +1436,14 @@
   }
 
   function renderTelemetryHtml(dev, cached) {
+    if (!dev.online && (!cached || Date.now() - cached.ts > 60000)) {
+      return `<div style="font-size:0.75rem; color:var(--text-muted); padding:6px 0; display:flex; align-items:center; gap:6px;">
+        <span style="display:inline-block; width:7px; height:7px; border-radius:50%; background:#ef4444;"></span>
+        <span>Satellite node is offline (power off, deep sleep, or disconnected)</span>
+      </div>`;
+    }
     if (!cached || !cached.data) {
-      return `<div style="font-size:0.75rem; color:var(--text-muted); padding:6px 0;">📡 Polling live satellite telemetry from ${dev.ip || 'node'}...</div>`;
+      return `<div style="font-size:0.75rem; color:var(--text-muted); padding:6px 0;">📡 Connecting to satellite at ${dev.ip || 'node'}...</div>`;
     }
 
     const sys = cached.data.system || {};
@@ -1679,9 +1685,9 @@
 
       const isWaterPump = dev.role === "water_pump";
 
-      // Trigger async background poll for live telemetry whenever IP is known
-      if (dev.ip && dev.ip !== "--" && dev.ip !== "0.0.0.0") {
-        if (!cached || (Date.now() - cached.ts > 2000)) {
+      // Only poll live satellite telemetry if device is marked online by Central Control
+      if (dev.online && dev.ip && dev.ip !== "--" && dev.ip !== "0.0.0.0") {
+        if (!cached || (Date.now() - cached.ts > 3000)) {
           fetchSatelliteTelemetry(dev.ip, dev.mac);
         }
       }
