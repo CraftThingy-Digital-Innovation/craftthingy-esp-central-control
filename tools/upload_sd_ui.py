@@ -4,7 +4,7 @@ import urllib.parse
 import os
 import sys
 
-def upload_file(host, local_path, remote_path, chunk_size=16384):
+def upload_file(host, local_path, remote_path, chunk_size=4096):
     with open(local_path, "r", encoding="utf-8") as f:
         content = f.read()
 

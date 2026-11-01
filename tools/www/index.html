@@ -1322,20 +1322,29 @@
   }
 
   window.addEventListener("resize", () => {
-    if (tripHistory.length > 0 && ceilingHistory.length > 0) {
-      drawCanvasChart(tripHistory[tripHistory.length - 1], ceilingHistory[ceilingHistory.length - 1]);
-    }
+    drawCanvasChart(lastTripWatts, lastCeilingWatts);
   });
 
+  let isFetchingStatus = false;
+  let consecutiveStatusFailures = 0;
+
   async function fetchStatus() {
+    if (isFetchingStatus) return;
+    isFetchingStatus = true;
     try {
       const res = await fetch(`${BASE_URL}/api/v1/device/status`);
       if (!res.ok) throw new Error("HTTP " + res.status);
       const json = await res.json();
+      consecutiveStatusFailures = 0;
       renderStatus(json);
     } catch (e) {
-      document.getElementById("status-badge").className = "badge danger";
-      document.getElementById("status-badge").innerHTML = '<span class="dot"></span> Offline';
+      consecutiveStatusFailures++;
+      if (consecutiveStatusFailures >= 3) {
+        document.getElementById("status-badge").className = "badge danger";
+        document.getElementById("status-badge").innerHTML = '<span class="dot"></span> Offline';
+      }
+    } finally {
+      isFetchingStatus = false;
     }
   }
 
@@ -1604,9 +1613,9 @@
         }
 
         // Keep Central Control's heartbeat alive for this node
-        if (satelliteTelemetryCache[mac].ts - (satelliteTelemetryCache[mac].lastReportedCentral || 0) > 15000) {
+        if (satelliteTelemetryCache[mac].ts - (satelliteTelemetryCache[mac].lastReportedCentral || 0) > 30000) {
           satelliteTelemetryCache[mac].lastReportedCentral = satelliteTelemetryCache[mac].ts;
-          postCommand("heartbeat", JSON.stringify({ mac: mac, ip: ip }));
+          postCommand("heartbeat", JSON.stringify({ mac: mac, ip: ip }), true);
         }
       }
     } catch(e) {
@@ -1847,7 +1856,7 @@
 
   const DEFAULT_KEY = "a1b2c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff00";
 
-  async function postCommand(cmd, payload = "") {
+  async function postCommand(cmd, payload = "", silent = false) {
     try {
       const res = await fetch(`${BASE_URL}/api/v1/device/command`, {
         method: "POST",
@@ -1858,10 +1867,14 @@
         body: JSON.stringify({ cmd, payload })
       });
       const data = await res.json();
-      showToast(data.message || (data.data && data.data.message) || "Command executed");
-      fetchStatus();
+      if (!silent) {
+        showToast(data.message || (data.data && data.data.message) || "Command executed");
+        fetchStatus();
+      }
     } catch (e) {
-      showToast("Error executing command: " + e.message);
+      if (!silent) {
+        showToast("Error executing command: " + e.message);
+      }
     }
   }
 
@@ -2009,12 +2022,36 @@
     }));
   }
 
-  function overrideDevice(mac, ip, action) {
+  async function overrideDevice(mac, ip, action) {
+    let sentDirect = false;
+    if (ip && ip !== "--" && ip !== "0.0.0.0") {
+      try {
+        const ctrl = new AbortController();
+        const tid = setTimeout(() => ctrl.abort(), 2000);
+        const res = await fetch(`http://${ip}/api/v1/device/command`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${DEFAULT_KEY}`
+          },
+          body: JSON.stringify({ cmd: action }),
+          signal: ctrl.signal
+        });
+        clearTimeout(tid);
+        if (res.ok) {
+          sentDirect = true;
+          showToast(`Direct command '${action}' sent to ${ip}`);
+          fetchSatelliteTelemetry(ip, mac);
+        }
+      } catch(e) {
+        console.warn("Direct satellite command fallback:", e);
+      }
+    }
     postCommand("override_device", JSON.stringify({
       mac: mac,
       ip: ip,
       action: action
-    }));
+    }), sentDirect);
   }
 
   function quarantineDevice(mac) {

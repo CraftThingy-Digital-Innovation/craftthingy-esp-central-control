@@ -310,20 +310,24 @@ public:
 
             // Dispatch command to satellite node
             HTTPClient http;
+            http.setConnectTimeout(300);
             http.begin("http://" + targetIp + "/api/v1/device/command");
             http.addHeader("Content-Type", "application/json");
-            http.setTimeout(1500);
+            http.addHeader("Authorization", "Bearer a1b2c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff00");
+            http.setTimeout(1000);
 
             String body = "{\"cmd\":\"" + action + "\"}";
             int code = http.POST(body);
             String payloadRes = (code > 0) ? http.getString() : "Timeout";
             http.end();
 
-            if (code <= 0 || code >= 400) {
-                // Fallback to /api/v1/pump/command if device was a pump
+            if (code <= 0 || code == 404) {
+                // Fallback to /api/v1/pump/command if device was a legacy pump
+                http.setConnectTimeout(300);
                 http.begin("http://" + targetIp + "/api/v1/pump/command");
                 http.addHeader("Content-Type", "application/json");
-                http.setTimeout(1500);
+                http.addHeader("Authorization", "Bearer a1b2c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff00");
+                http.setTimeout(1000);
                 code = http.POST(body);
                 payloadRes = (code > 0) ? http.getString() : "Timeout";
                 http.end();
@@ -583,9 +587,11 @@ private:
     bool postSatelliteCommand(const String& targetIp, const String& cmd, const String& payload = "") {
         if (targetIp.length() == 0 || targetIp == "--" || targetIp == "0.0.0.0") return false;
         HTTPClient http;
+        http.setConnectTimeout(300);
         http.begin("http://" + targetIp + "/api/v1/device/command");
         http.addHeader("Content-Type", "application/json");
-        http.setTimeout(1200);
+        http.addHeader("Authorization", "Bearer a1b2c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff00");
+        http.setTimeout(800);
         String body = "{\"cmd\":\"" + cmd + "\",\"payload\":\"" + payload + "\"}";
         int code = http.POST(body);
         http.end();
