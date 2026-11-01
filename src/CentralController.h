@@ -129,9 +129,9 @@ public:
             if (PIN_LED_STATUS >= 0) digitalWrite(PIN_LED_STATUS, LOW);
         }
 
-        // Periodic Satellite Heartbeat Supervisor (Active ping every 20 seconds)
+        // Periodic Satellite Heartbeat & Smart Dry-Run Supervisor (every 10 seconds)
         static uint32_t lastSatelliteProbeMs = 0;
-        if (WiFi.status() == WL_CONNECTED && (millis() - lastSatelliteProbeMs >= 20000)) {
+        if (WiFi.status() == WL_CONNECTED && (millis() - lastSatelliteProbeMs >= 10000)) {
             lastSatelliteProbeMs = millis();
             uint8_t count = 0;
             const RegisteredAppliance* devs = _arbiter.getDevices(count);
@@ -139,10 +139,12 @@ public:
                 if (strlen(devs[i].ip) > 0 && strcmp(devs[i].ip, "--") != 0 && strcmp(devs[i].ip, "0.0.0.0") != 0) {
                     HTTPClient http;
                     http.begin("http://" + String(devs[i].ip) + "/api/v1/system/status");
-                    http.setTimeout(350);
+                    http.setTimeout(450);
                     int code = http.GET();
                     if (code == 200) {
                         _arbiter.updateHeartbeat(devs[i].mac, devs[i].ip);
+                        String body = http.getString();
+                        superviseWaterPumpNode(devs[i], body);
                     }
                     http.end();
                 }
@@ -573,6 +575,82 @@ private:
     uint32_t _pairingOpenedMs;
     bool     _buzzerMuted;
     uint32_t _lastBuzzerToggleMs;
+
+    bool postSatelliteCommand(const String& targetIp, const String& cmd, const String& payload = "") {
+        if (targetIp.length() == 0 || targetIp == "--" || targetIp == "0.0.0.0") return false;
+        HTTPClient http;
+        http.begin("http://" + targetIp + "/api/v1/device/command");
+        http.addHeader("Content-Type", "application/json");
+        http.setTimeout(1200);
+        String body = "{\"cmd\":\"" + cmd + "\",\"payload\":\"" + payload + "\"}";
+        int code = http.POST(body);
+        http.end();
+        return (code == 200);
+    }
+
+    void superviseWaterPumpNode(const RegisteredAppliance& dev, const String& statusJson) {
+        if (strcmp(dev.role, "water_pump") != 0 && statusJson.indexOf("\"role\":\"water_pump\"") < 0) {
+            return;
+        }
+
+        bool pumpRunning = (statusJson.indexOf("\"pumpRunning\":true") >= 0);
+        bool inPrimeProbe = (statusJson.indexOf("\"inPrimeProbe\":true") >= 0);
+
+        // Parse run duration
+        uint32_t runDurationSec = 0;
+        int idxRun = statusJson.indexOf("\"runDurationSec\":");
+        if (idxRun >= 0) {
+            runDurationSec = statusJson.substring(idxRun + 17).toInt();
+        }
+
+        // Parse satellite reported power (if PZEM present on satellite)
+        float satellitePower = 0.0f;
+        int idxPwr = statusJson.indexOf("\"power\":");
+        if (idxPwr >= 0) {
+            satellitePower = statusJson.substring(idxPwr + 8).toFloat();
+        }
+
+        // Total Central PZEM telemetry
+        float centralPower = _pzem.getTelemetry().power;
+
+        // -------------------------------------------------------------
+        // Pump is actively running: evaluate power health & lease
+        // -------------------------------------------------------------
+        if (pumpRunning) {
+            // Give 5 seconds for inrush spike (800W) to settle into plateau (~200W)
+            if (runDurationSec >= 5 || inPrimeProbe) {
+                bool hasSatPzem = (statusJson.indexOf("\"hasPzem\":true") >= 0 && statusJson.indexOf("\"pzemOnline\":true") >= 0);
+                bool isCavitating = false;
+                bool isLoaded = false;
+
+                if (hasSatPzem) {
+                    if (satellitePower > 5.0f && satellitePower < 120.0f) {
+                        isCavitating = true;
+                    } else if (satellitePower >= 150.0f) {
+                        isLoaded = true;
+                    }
+                } else {
+                    // Central PZEM assessment
+                    if (centralPower >= dev.ratedWatts * 0.5f) {
+                        isLoaded = true;
+                    }
+                }
+
+                if (isCavitating) {
+                    Serial.println(F("[SUPERVISOR] Cavitation / dry run detected on Water Pump (<120W)! Sending trip_dry_run..."));
+                    postSatelliteCommand(dev.ip, "trip_dry_run", "cavitation_detected");
+                } else if (isLoaded || !hasSatPzem) {
+                    // Healthy pumping! Extend lease so the pump never falsely trips 15m timeout while filling
+                    static uint32_t lastLeaseGrantMs = 0;
+                    if (millis() - lastLeaseGrantMs >= 25000) { // grant lease renewal every 25-30s
+                        lastLeaseGrantMs = millis();
+                        Serial.println(F("[SUPERVISOR] Water pump running healthy. Extending runtime lease by 180s..."));
+                        postSatelliteCommand(dev.ip, "extend_lease", "180");
+                    }
+                }
+            }
+        }
+    }
 
     void handleSurgeAlarm() {
         if (_arbiter.isSurgeAlertActive()) {

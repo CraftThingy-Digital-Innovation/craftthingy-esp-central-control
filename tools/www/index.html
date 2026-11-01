@@ -1457,8 +1457,12 @@
     // Format Motor State & Runtime
     let motorHtml = "<span>--</span>";
     if (isWaterPump) {
-      if (d.dryRunAlarm) {
-        motorHtml = `<span style="color:var(--danger); font-weight:700;">🚨 Cutoff (Dry-Run)</span>`;
+      if (d.inPrimeProbe) {
+        motorHtml = `<span style="color:#38bdf8; font-weight:700;">🔍 Prime Probe (${d.runDurationSec || 0}s)</span>`;
+      } else if (d.cooldownActive) {
+        motorHtml = `<span style="color:#f59e0b; font-weight:700;">⏳ Well Recharge (${d.cooldownRemainingSec || 0}s left)</span>`;
+      } else if (d.dryRunAlarm) {
+        motorHtml = `<span style="color:var(--danger); font-weight:700;">🚨 Cutoff (${d.dryRunReason || 'Dry-Run'})</span>`;
       } else if (d.pumpRunning) {
         motorHtml = `<span style="color:var(--success); font-weight:700;">⚡ Running (${formatDuration(d.runDurationSec)})</span>`;
       } else {
@@ -1469,8 +1473,14 @@
     // Format Dry Run Status
     let dryRunHtml = "<span>--</span>";
     if (isWaterPump) {
-      if (d.dryRunAlarm) {
-        dryRunHtml = `<span style="color:var(--danger); font-weight:700;">⚠️ Tripped (>15m)</span>`;
+      if (d.inPrimeProbe) {
+        dryRunHtml = `<span style="color:#38bdf8; font-weight:700;">🔍 Testing Prime Flow (12s)</span>`;
+      } else if (d.cooldownActive) {
+        dryRunHtml = `<span style="color:#f59e0b; font-weight:700;">⏳ Auto-Recover in ${formatDuration(d.cooldownRemainingSec || 0)} (Try ${d.retryAttempt || 1}/3)</span>`;
+      } else if (d.dryRunAlarm) {
+        dryRunHtml = `<span style="color:var(--danger); font-weight:700;">⚠️ Tripped (${d.dryRunReason || '>15m limit'})</span>`;
+      } else if (d.leaseRemainingSec > 0) {
+        dryRunHtml = `<span style="color:var(--success); font-weight:700;">🛡️ Verified Safe (Lease: ${d.leaseRemainingSec}s)</span>`;
       } else {
         dryRunHtml = `<span style="color:var(--success);">🛡️ Armed (${formatDuration(d.maxRunTimeSec || 900)} max)</span>`;
       }
@@ -1552,9 +1562,15 @@
         const badge = document.getElementById(`badge-${cleanMac}`);
         if (badge) {
           const d = json.data && json.data.device;
-          if (d && d.dryRunAlarm) {
+          if (d && d.inPrimeProbe) {
+            badge.className = "badge warn";
+            badge.innerText = "🔍 PROBING PRIME";
+          } else if (d && d.cooldownActive) {
+            badge.className = "badge warn";
+            badge.innerText = `⏳ RECHARGE (${d.cooldownRemainingSec || 0}s)`;
+          } else if (d && d.dryRunAlarm) {
             badge.className = "badge badge-alarm";
-            badge.innerText = "🚨 DRY-RUN ALARM";
+            badge.innerText = `🚨 DRY-RUN (${d.dryRunReason || 'ALARM'})`;
           } else if (d && d.pumpRunning) {
             badge.className = "badge online";
             badge.innerText = `⚡ RUNNING (${d.runDurationSec || 0}s)`;
@@ -1569,7 +1585,12 @@
         const rstBtn = document.getElementById(`btn-reset-${cleanMac}`);
         if (rstBtn) {
           const d = json.data && json.data.device;
-          rstBtn.style.display = (d && d.dryRunAlarm) ? "inline-flex" : "none";
+          rstBtn.style.display = (d && (d.dryRunAlarm || d.cooldownActive)) ? "inline-flex" : "none";
+        }
+        const probeBtn = document.getElementById(`btn-probe-${cleanMac}`);
+        if (probeBtn) {
+          const d = json.data && json.data.device;
+          probeBtn.style.display = (d && (d.dryRunAlarm || d.cooldownActive)) ? "inline-flex" : "none";
         }
 
         // Keep Central Control's heartbeat alive for this node
@@ -1621,10 +1642,16 @@
       let stateBadgeClass = (dev.online || isLive) ? "online" : "danger";
       let stateLabel = (dev.online || isLive) ? "STANDBY" : "OFFLINE";
 
-      if (d.dryRunAlarm) {
+      if (d.inPrimeProbe) {
+        stateBadgeClass = "warn";
+        stateLabel = "🔍 PROBING PRIME";
+      } else if (d.cooldownActive) {
+        stateBadgeClass = "warn";
+        stateLabel = `⏳ RECHARGE (${d.cooldownRemainingSec || 0}s)`;
+      } else if (d.dryRunAlarm) {
         stateClass = "paused";
         stateBadgeClass = "badge-alarm";
-        stateLabel = "🚨 DRY-RUN ALARM";
+        stateLabel = `🚨 DRY-RUN (${d.dryRunReason || 'ALARM'})`;
       } else if (d.pumpRunning || dev.activePermit) {
         stateClass = "active-permit";
         stateBadgeClass = "online";
@@ -1679,7 +1706,8 @@
 
             <div class="override-group">
               <button class="btn btn-outline" style="padding:4px 8px; font-size:0.75rem;" onclick="toggleInrushCurve('${cleanMac}')">📊 Power Curve</button>
-              <button id="btn-reset-${cleanMac}" class="btn btn-warning" style="padding:4px 10px; font-size:0.75rem; display:${d.dryRunAlarm ? 'inline-flex' : 'none'};" onclick="overrideDevice('${dev.mac}', '${dev.ip}', 'reset_safety')">⚠️ Reset Dry-Run Alarm</button>
+              <button id="btn-probe-${cleanMac}" class="btn btn-outline" style="padding:4px 10px; font-size:0.75rem; display:${(d.dryRunAlarm || d.cooldownActive) ? 'inline-flex' : 'none'}; border-color:#38bdf8; color:#38bdf8;" onclick="overrideDevice('${dev.mac}', '${dev.ip}', 'probe_prime')">⚡ Test Prime Now</button>
+              <button id="btn-reset-${cleanMac}" class="btn btn-warning" style="padding:4px 10px; font-size:0.75rem; display:${(d.dryRunAlarm || d.cooldownActive) ? 'inline-flex' : 'none'};" onclick="overrideDevice('${dev.mac}', '${dev.ip}', 'reset_safety')">⚠️ Reset Alarm</button>
               <button class="btn btn-success" style="padding:4px 8px; font-size:0.75rem;" onclick="overrideDevice('${dev.mac}', '${dev.ip}', 'start')">Force ON</button>
               <button class="btn btn-danger" style="padding:4px 8px; font-size:0.75rem;" onclick="overrideDevice('${dev.mac}', '${dev.ip}', 'stop')">Force OFF</button>
               <button class="btn btn-outline" style="padding:4px 8px; font-size:0.75rem;" onclick="overrideDevice('${dev.mac}', '${dev.ip}', 'auto')">Auto Mode</button>
@@ -1759,7 +1787,12 @@
 
         const rstBtn = document.getElementById(`btn-reset-${cleanMac}`);
         if (rstBtn) {
-          rstBtn.style.display = d.dryRunAlarm ? "inline-flex" : "none";
+          rstBtn.style.display = (d.dryRunAlarm || d.cooldownActive) ? "inline-flex" : "none";
+        }
+
+        const probeBtn = document.getElementById(`btn-probe-${cleanMac}`);
+        if (probeBtn) {
+          probeBtn.style.display = (d.dryRunAlarm || d.cooldownActive) ? "inline-flex" : "none";
         }
 
         const prioritySelect = document.getElementById(`priority-${cleanMac}`);
