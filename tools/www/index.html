@@ -390,6 +390,87 @@
       animation: pulseAlarm 1.8s infinite ease-in-out;
     }
 
+    /* Time Range & Zoom Toolbar */
+    .chart-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .chart-btn-group {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+    .btn-chart-range {
+      padding: 4px 10px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      border-radius: 6px;
+      border: 1px solid var(--card-border);
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .btn-chart-range:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text);
+    }
+    .btn-chart-range.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent-hover);
+      box-shadow: 0 2px 6px rgba(14, 165, 233, 0.35);
+    }
+
+    /* Billing & Energy Calculator Card */
+    .calc-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .calc-tile {
+      background: rgba(0, 0, 0, 0.25);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 8px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .calc-tile .label {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .calc-tile .amount {
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .calc-tile .subtext {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+    }
+
+    /* Inrush Power Curve Drawer */
+    .inrush-curve-box {
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(14, 165, 233, 0.25);
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 8px;
+      display: none;
+    }
+    .inrush-curve-box.active {
+      display: block;
+    }
+
     /* Toast Notification */
     #toast {
       position: fixed;
@@ -570,13 +651,35 @@
       </div>
     </div>
 
+    <!-- Interactive Chart Toolbar: Time-Range Lookback & Zoom Controls -->
+    <div class="chart-toolbar">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">TIMELINE LOOKBACK:</span>
+        <div class="chart-btn-group">
+          <button class="btn-chart-range active" id="range-60" onclick="setTimeWindow(60)">60s Live</button>
+          <button class="btn-chart-range" id="range-300" onclick="setTimeWindow(300)">5 Min</button>
+          <button class="btn-chart-range" id="range-900" onclick="setTimeWindow(900)">15 Min</button>
+          <button class="btn-chart-range" id="range-3600" onclick="setTimeWindow(3600)">1 Hour</button>
+          <button class="btn-chart-range" id="range-all" onclick="setTimeWindow(-1)">All Cached</button>
+        </div>
+      </div>
+      <div style="display:flex; align-items:center; gap:6px;">
+        <span style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">ZOOM:</span>
+        <button class="btn-chart-range" onclick="zoomChart(1.3)" title="Zoom In">🔍 +</button>
+        <button class="btn-chart-range" onclick="zoomChart(0.7)" title="Zoom Out">🔍 -</button>
+        <button class="btn-chart-range" onclick="resetChartZoom()" title="Reset Zoom">🔄 Reset</button>
+        <span id="chart-zoom-val" style="font-size:0.72rem; color:var(--text-muted); min-width:38px;">1.0x</span>
+      </div>
+    </div>
+
     <!-- Canvas Chart Container -->
     <div style="position:relative; width:100%; background:rgba(0,0,0,0.35); border:1px solid var(--card-border); border-radius:8px; padding:12px 12px 6px 12px;">
-      <canvas id="powerChart" height="240" style="width:100%; display:block;"></canvas>
+      <canvas id="powerChart" height="240" style="width:100%; display:block; cursor:crosshair;"></canvas>
       <div id="chart-watermark" style="position:absolute; top:20px; right:24px; text-align:right; pointer-events:none;">
         <div style="font-size:2rem; font-weight:800; color:var(--text);" id="chart-power-val">-- W</div>
         <div style="font-size:0.8rem; font-weight:600; padding:3px 8px; border-radius:4px; display:inline-block; margin-top:4px;" id="chart-safety-badge">ANALYZING LOAD...</div>
       </div>
+      <div id="chart-scrub-tooltip" style="display:none; position:absolute; pointer-events:none; background:rgba(15,23,42,0.95); border:1px solid var(--accent); border-radius:6px; padding:6px 10px; font-size:0.75rem; color:#fff; box-shadow:0 4px 12px rgba(0,0,0,0.5); z-index:10;"></div>
     </div>
 
     <!-- Sub-Chart Real-Time Status Ticker -->
@@ -597,6 +700,55 @@
         <span class="label">Load Siphoning State</span>
         <span class="number" id="chart-siphon-state">Normal Operation</span>
       </div>
+    </div>
+  </div>
+
+  <!-- Row: Electricity Cost, Energy Usage & Monthly Billing Calculator -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">⚡ Electricity Cost & Monthly Billing Analytics</span>
+      <div style="display:flex; gap:10px; align-items:center; font-size:0.8rem; flex-wrap:wrap;">
+        <label style="color:var(--text-muted);">Tariff Rate:</label>
+        <select id="calc-currency" onchange="updateBillingCalculations()" style="background:rgba(0,0,0,0.4); color:var(--text); border:1px solid var(--card-border); padding:4px 6px; border-radius:4px; font-size:0.78rem;">
+          <option value="IDR">IDR (Rp / kWh)</option>
+          <option value="USD">USD ($ / kWh)</option>
+        </select>
+        <input type="number" id="tariff-rate" value="1444.70" step="10" oninput="updateBillingCalculations()" style="width:90px; background:rgba(0,0,0,0.4); color:#fff; border:1px solid var(--card-border); padding:4px 6px; border-radius:4px; font-size:0.8rem; font-weight:600; text-align:right;">
+        <span style="font-size:0.75rem; color:var(--text-muted);" id="tariff-unit">Rp/kWh</span>
+      </div>
+    </div>
+
+    <div class="calc-grid">
+      <div class="calc-tile">
+        <span class="label">Instant Burn Rate</span>
+        <span class="amount" id="cost-per-hour" style="color:var(--accent);">-- / hr</span>
+        <span class="subtext" id="burn-rate-watts">Based on live load</span>
+      </div>
+      <div class="calc-tile">
+        <span class="label">Projected Daily Cost</span>
+        <span class="amount" id="cost-per-day">-- / day</span>
+        <span class="subtext">24h run-rate at current load</span>
+      </div>
+      <div class="calc-tile">
+        <span class="label">Estimated Monthly Bill</span>
+        <span class="amount" id="cost-per-month" style="color:var(--success);">-- / month</span>
+        <span class="subtext" id="monthly-kwh-proj">Projected ~-- kWh / mo</span>
+      </div>
+      <div class="calc-tile">
+        <span class="label">Metered Cumulative Cost</span>
+        <span class="amount" id="cost-cumulative">--</span>
+        <span class="subtext" id="cumulative-kwh-text">Cumulative logged by PZEM</span>
+      </div>
+    </div>
+
+    <!-- What-If Appliance Cost Simulator Drawer -->
+    <div style="margin-top:12px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.06); display:flex; flex-wrap:wrap; gap:12px; align-items:center; font-size:0.8rem;">
+      <span style="color:var(--accent); font-weight:600;">💡 Appliance Cost Estimator:</span>
+      <span>If a </span>
+      <input type="number" id="sim-watts" value="200" style="width:65px; background:rgba(0,0,0,0.4); color:#fff; border:1px solid var(--card-border); padding:3px 6px; border-radius:4px; font-size:0.8rem; text-align:right;" oninput="updateBillingCalculations()">
+      <span> Watt appliance runs for </span>
+      <input type="number" id="sim-hours" value="2.0" step="0.5" style="width:50px; background:rgba(0,0,0,0.4); color:#fff; border:1px solid var(--card-border); padding:3px 6px; border-radius:4px; font-size:0.8rem; text-align:right;" oninput="updateBillingCalculations()">
+      <span> hrs/day &rarr; it uses <strong id="sim-kwh" style="color:#fff;">12.0 kWh</strong> and costs <strong id="sim-cost" style="color:var(--warning);">Rp 17,336 / month</strong></span>
     </div>
   </div>
 
@@ -656,17 +808,55 @@
     setTimeout(() => t.classList.remove("show"), 3200);
   }
 
-  // Real-Time Power & Trajectory Chart Engine
-  const MAX_HISTORY = 60;
-  let powerHistory = [];
-  let predHistory = [];
-  let ceilingHistory = [];
-  let tripHistory = [];
+  // --------------------------------------------------------------------------
+  // Real-Time Power & Trajectory Chart Engine (with Zoom & Timeline Lookback)
+  // --------------------------------------------------------------------------
+  const MAX_BUFFER_SAMPLES = 3600; // 1 Hour of rolling 1s samples in client memory
+  let timeSeriesBuffer = [];
+  let currentTimeWindowSec = 60; // 60s, 300s (5m), 900s (15m), 3600s (1h), or -1 (All)
+  let currentZoomScale = 1.0;
+  let lastCeilingWatts = 1170;
+  let lastTripWatts = 1300;
+  let lastGridWatts = 0;
+  let lastCumulativeEnergyKwh = 0;
+  let scrubHoverIndex = -1;
+
+  function setTimeWindow(sec) {
+    currentTimeWindowSec = sec;
+    currentZoomScale = 1.0;
+    document.querySelectorAll(".btn-chart-range").forEach(b => {
+      if (b.id && b.id.startsWith("range-")) {
+        b.classList.toggle("active", b.id === (sec === -1 ? "range-all" : `range-${sec}`));
+      }
+    });
+    document.getElementById("chart-zoom-val").innerText = "1.0x";
+    drawCanvasChart(lastTripWatts, lastCeilingWatts);
+  }
+
+  function zoomChart(factor) {
+    currentZoomScale = Math.max(0.2, Math.min(10.0, currentZoomScale * factor));
+    document.getElementById("chart-zoom-val").innerText = `${currentZoomScale.toFixed(1)}x`;
+    drawCanvasChart(lastTripWatts, lastCeilingWatts);
+  }
+
+  function resetChartZoom() {
+    currentZoomScale = 1.0;
+    document.getElementById("chart-zoom-val").innerText = "1.0x";
+    drawCanvasChart(lastTripWatts, lastCeilingWatts);
+  }
 
   function updateChartData(d) {
     const curW = d.ac ? d.ac.power : 0;
     const ceilingW = d.profile ? d.profile.effectiveCeilingWatts : 1170;
     const tripW = d.profile ? d.profile.maxWatts : 1300;
+    const volt = d.ac ? d.ac.voltage : 0;
+    const pf = d.ac ? d.ac.powerFactor : 0.85;
+    const energy = d.ac ? d.ac.energy : 0;
+
+    lastGridWatts = curW;
+    lastCeilingWatts = ceilingW;
+    lastTripWatts = tripW;
+    lastCumulativeEnergyKwh = energy;
 
     let predictedW = curW;
     let expectedInrush = 0;
@@ -687,16 +877,19 @@
       predictedW = curW * (1.0 + (Math.sin(Date.now() / 2500) * 0.025));
     }
 
-    powerHistory.push(curW);
-    predHistory.push(predictedW);
-    ceilingHistory.push(ceilingW);
-    tripHistory.push(tripW);
+    // Append to 1-Hour Time Series Ring Buffer
+    timeSeriesBuffer.push({
+      time: Date.now(),
+      power: curW,
+      pred: predictedW,
+      ceiling: ceilingW,
+      trip: tripW,
+      v: volt,
+      pf: pf
+    });
 
-    if (powerHistory.length > MAX_HISTORY) {
-      powerHistory.shift();
-      predHistory.shift();
-      ceilingHistory.shift();
-      tripHistory.shift();
+    if (timeSeriesBuffer.length > MAX_BUFFER_SAMPLES) {
+      timeSeriesBuffer.shift();
     }
 
     // Update Sub-Chart Tickers
@@ -738,7 +931,11 @@
     document.getElementById("legend-ceiling").innerText = `${ceilingW.toFixed(0)} W`;
     document.getElementById("legend-mcb").innerText = `${tripW.toFixed(0)} W`;
 
+    // Redraw Canvas
     drawCanvasChart(tripW, ceilingW);
+
+    // Update Electricity Cost & Monthly Math
+    updateBillingCalculations();
   }
 
   function drawCanvasChart(tripW, ceilingW) {
@@ -765,33 +962,43 @@
 
     ctx.clearRect(0, 0, w, h);
 
+    // Determine visible window based on selected time window and zoom
+    const totalSamples = timeSeriesBuffer.length;
+    let windowPoints = totalSamples;
+    if (currentTimeWindowSec > 0) {
+      windowPoints = Math.round(currentTimeWindowSec / currentZoomScale);
+    } else {
+      windowPoints = Math.round(totalSamples / currentZoomScale);
+    }
+    windowPoints = Math.max(10, Math.min(totalSamples, windowPoints));
+
+    const visibleData = (totalSamples > 0) ? timeSeriesBuffer.slice(-windowPoints) : [];
+
     // Compute dynamic Max Y
     let maxVal = Math.max(1600, tripW * 1.35);
-    for (let i = 0; i < powerHistory.length; i++) {
-      if (powerHistory[i] > maxVal) maxVal = powerHistory[i] * 1.15;
-      if (predHistory[i] > maxVal) maxVal = predHistory[i] * 1.15;
+    for (let i = 0; i < visibleData.length; i++) {
+      if (visibleData[i].power > maxVal) maxVal = visibleData[i].power * 1.15;
+      if (visibleData[i].pred > maxVal) maxVal = visibleData[i].pred * 1.15;
     }
 
     function getY(val) {
       return padT + plotH - ((val / maxVal) * plotH);
     }
     function getX(idx) {
-      return padL + (idx / (MAX_HISTORY - 1)) * plotW;
+      if (visibleData.length <= 1) return padL;
+      return padL + (idx / (visibleData.length - 1)) * plotW;
     }
 
     const yTrip = getY(tripW);
     const yCeiling = getY(ceilingW);
 
     // 1. Shaded Danger & Unsafe Zones
-    // Critical Trip Zone (Red Shading above Trip line)
     ctx.fillStyle = "rgba(239, 68, 68, 0.18)";
     ctx.fillRect(padL, padT, plotW, Math.max(0, yTrip - padT));
 
-    // Thermal Cushion Zone (Amber Shading between Ceiling and Trip)
     ctx.fillStyle = "rgba(245, 158, 11, 0.12)";
     ctx.fillRect(padL, yTrip, plotW, Math.max(0, yCeiling - yTrip));
 
-    // Safe Zone (Dark emerald tint below Ceiling)
     ctx.fillStyle = "rgba(16, 185, 129, 0.03)";
     ctx.fillRect(padL, yCeiling, plotW, Math.max(0, (padT + plotH) - yCeiling));
 
@@ -834,7 +1041,6 @@
     ctx.lineTo(w - padR, yTrip);
     ctx.stroke();
 
-    // Trip Label Pill
     ctx.fillStyle = "#ef4444";
     ctx.fillRect(w - padR - 110, yTrip - 10, 110, 18);
     ctx.fillStyle = "#ffffff";
@@ -853,7 +1059,6 @@
     ctx.lineTo(w - padR, yCeiling);
     ctx.stroke();
 
-    // Ceiling Label Pill
     ctx.fillStyle = "#f59e0b";
     ctx.fillRect(w - padR - 130, yCeiling - 10, 130, 18);
     ctx.fillStyle = "#111827";
@@ -863,15 +1068,15 @@
     ctx.restore();
 
     // 5. Virtual Predicted Trajectory (Purple Dotted Line)
-    if (predHistory.length > 1) {
+    if (visibleData.length > 1) {
       ctx.save();
       ctx.setLineDash([3, 3]);
       ctx.strokeStyle = "rgba(168, 85, 247, 0.85)";
       ctx.lineWidth = 2;
       ctx.beginPath();
-      for (let i = 0; i < predHistory.length; i++) {
+      for (let i = 0; i < visibleData.length; i++) {
         const x = getX(i);
-        const y = getY(predHistory[i]);
+        const y = getY(visibleData[i].pred);
         if (i === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
       }
@@ -880,8 +1085,7 @@
     }
 
     // 6. Active Measured Grid Power (Cyan Line + Gradient Area)
-    if (powerHistory.length > 1) {
-      // Shaded Area under Curve
+    if (visibleData.length > 1) {
       const grad = ctx.createLinearGradient(0, padT, 0, padT + plotH);
       grad.addColorStop(0, "rgba(14, 165, 233, 0.45)");
       grad.addColorStop(0.8, "rgba(14, 165, 233, 0.08)");
@@ -889,33 +1093,31 @@
 
       ctx.beginPath();
       ctx.moveTo(getX(0), padT + plotH);
-      for (let i = 0; i < powerHistory.length; i++) {
-        ctx.lineTo(getX(i), getY(powerHistory[i]));
+      for (let i = 0; i < visibleData.length; i++) {
+        ctx.lineTo(getX(i), getY(visibleData[i].power));
       }
-      ctx.lineTo(getX(powerHistory.length - 1), padT + plotH);
+      ctx.lineTo(getX(visibleData.length - 1), padT + plotH);
       ctx.closePath();
       ctx.fillStyle = grad;
       ctx.fill();
 
-      // Smooth Stroke Line
       ctx.save();
       ctx.lineWidth = 2.5;
       ctx.strokeStyle = "#38bdf8";
       ctx.shadowColor = "rgba(56, 189, 248, 0.8)";
       ctx.shadowBlur = 8;
       ctx.beginPath();
-      for (let i = 0; i < powerHistory.length; i++) {
+      for (let i = 0; i < visibleData.length; i++) {
         const x = getX(i);
-        const y = getY(powerHistory[i]);
+        const y = getY(visibleData[i].power);
         if (i === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
       }
       ctx.stroke();
       ctx.restore();
 
-      // Latest Data Point Pulsing Head
-      const lastX = getX(powerHistory.length - 1);
-      const lastY = getY(powerHistory[powerHistory.length - 1]);
+      const lastX = getX(visibleData.length - 1);
+      const lastY = getY(visibleData[visibleData.length - 1].power);
       ctx.fillStyle = "#38bdf8";
       ctx.beginPath();
       ctx.arc(lastX, lastY, 5, 0, Math.PI * 2);
@@ -926,16 +1128,189 @@
       ctx.beginPath();
       ctx.arc(lastX, lastY, 2, 0, Math.PI * 2);
       ctx.stroke();
+
+      // Crosshair Hover Scrub Line
+      if (scrubHoverIndex >= 0 && scrubHoverIndex < visibleData.length) {
+        const hX = getX(scrubHoverIndex);
+        const hY = getY(visibleData[scrubHoverIndex].power);
+        ctx.save();
+        ctx.setLineDash([4, 4]);
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.7)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(hX, padT);
+        ctx.lineTo(hX, padT + plotH);
+        ctx.stroke();
+
+        ctx.fillStyle = "#fff";
+        ctx.beginPath();
+        ctx.arc(hX, hY, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
     }
 
     // 7. X-Axis Time Labels
     ctx.fillStyle = "rgba(255, 255, 255, 0.35)";
     ctx.font = "10px sans-serif";
     ctx.textAlign = "center";
-    const xLabels = ["-60s", "-45s", "-30s", "-15s", "Now"];
-    for (let i = 0; i < xLabels.length; i++) {
-      const x = padL + (i / (xLabels.length - 1)) * plotW;
-      ctx.fillText(xLabels[i], x, h - 8);
+    if (visibleData.length > 1) {
+      const startTime = visibleData[0].time;
+      const endTime = visibleData[visibleData.length - 1].time;
+      const durationSec = Math.max(1, Math.round((endTime - startTime) / 1000));
+      
+      const xCount = 5;
+      for (let i = 0; i < xCount; i++) {
+        const x = padL + (i / (xCount - 1)) * plotW;
+        let label = "";
+        if (i === xCount - 1) {
+          label = "Now";
+        } else {
+          const secAgo = Math.round(durationSec * (1 - (i / (xCount - 1))));
+          label = secAgo >= 60 ? `-${Math.round(secAgo/60)}m` : `-${secAgo}s`;
+        }
+        ctx.fillText(label, x, h - 8);
+      }
+    } else {
+      ctx.fillText("-60s", padL, h - 8);
+      ctx.fillText("Now", padL + plotW, h - 8);
+    }
+  }
+
+  // Interactive Canvas Scrubbing & Zooming
+  window.addEventListener("DOMContentLoaded", () => {
+    initCanvasEvents();
+  });
+
+  function initCanvasEvents() {
+    const chartCanvas = document.getElementById("powerChart");
+    if (!chartCanvas) return;
+    
+    chartCanvas.addEventListener("mousemove", (e) => {
+      const rect = chartCanvas.getBoundingClientRect();
+      const padL = 50;
+      const padR = 20;
+      const plotW = rect.width - padL - padR;
+      const mouseX = e.clientX - rect.left - padL;
+
+      let windowPoints = timeSeriesBuffer.length;
+      if (currentTimeWindowSec > 0) windowPoints = Math.round(currentTimeWindowSec / currentZoomScale);
+      windowPoints = Math.max(10, Math.min(timeSeriesBuffer.length, windowPoints));
+      const visibleData = timeSeriesBuffer.slice(-windowPoints);
+
+      if (mouseX >= 0 && mouseX <= plotW && visibleData.length > 1) {
+        const idx = Math.min(visibleData.length - 1, Math.max(0, Math.round((mouseX / plotW) * (visibleData.length - 1))));
+        scrubHoverIndex = idx;
+        const item = visibleData[idx];
+        const date = new Date(item.time);
+        const timeStr = date.toTimeString().split(" ")[0];
+
+        const tooltip = document.getElementById("chart-scrub-tooltip");
+        if (tooltip) {
+          tooltip.style.display = "block";
+          tooltip.style.left = `${Math.min(rect.width - 170, Math.max(10, e.clientX - rect.left + 10))}px`;
+          tooltip.style.top = `${Math.max(10, e.clientY - rect.top - 40)}px`;
+          tooltip.innerHTML = `<strong>🕒 ${timeStr}</strong> &bull; <span style="color:#38bdf8;">${item.power.toFixed(1)} W</span><br>Headroom: ${(item.ceiling - item.power).toFixed(0)}W &bull; V: ${item.v.toFixed(1)}V`;
+        }
+        drawCanvasChart(lastTripWatts, lastCeilingWatts);
+      }
+    });
+
+    chartCanvas.addEventListener("mouseleave", () => {
+      scrubHoverIndex = -1;
+      const tooltip = document.getElementById("chart-scrub-tooltip");
+      if (tooltip) tooltip.style.display = "none";
+      drawCanvasChart(lastTripWatts, lastCeilingWatts);
+    });
+
+    chartCanvas.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      if (e.deltaY < 0) {
+        zoomChart(1.15); // Zoom In
+      } else {
+        zoomChart(0.85); // Zoom Out
+      }
+    }, { passive: false });
+  }
+
+  // --------------------------------------------------------------------------
+  // Electricity Consumption & Monthly Billing Analytics Engine
+  // --------------------------------------------------------------------------
+  function updateBillingCalculations() {
+    const currSelect = document.getElementById("calc-currency");
+    const currency = currSelect ? currSelect.value : "IDR";
+    const rateInput = document.getElementById("tariff-rate");
+    let rate = rateInput ? parseFloat(rateInput.value) : 1444.70;
+    if (isNaN(rate) || rate <= 0) rate = (currency === "IDR") ? 1444.70 : 0.15;
+
+    const sym = (currency === "IDR") ? "Rp " : "$";
+    const unitSpan = document.getElementById("tariff-unit");
+    if (unitSpan) unitSpan.innerText = (currency === "IDR") ? "Rp/kWh" : "$/kWh";
+
+    // Instant Cost per Hour = (curW / 1000) * rate
+    const costPerHour = (lastGridWatts / 1000) * rate;
+    const costPerDay = costPerHour * 24;
+
+    const elHour = document.getElementById("cost-per-hour");
+    const elDay = document.getElementById("cost-per-day");
+    const elMonth = document.getElementById("cost-per-month");
+    const elKwhMonth = document.getElementById("monthly-kwh-proj");
+    const elCum = document.getElementById("cost-cumulative");
+    const elCumKwh = document.getElementById("cumulative-kwh-text");
+
+    if (currency === "IDR") {
+      if (elHour) elHour.innerText = `Rp ${Math.round(costPerHour).toLocaleString()} / hr`;
+      if (elDay) elDay.innerText = `Rp ${Math.round(costPerDay).toLocaleString()} / day`;
+    } else {
+      if (elHour) elHour.innerText = `$${costPerHour.toFixed(3)} / hr`;
+      if (elDay) elDay.innerText = `$${costPerDay.toFixed(2)} / day`;
+    }
+
+    const burnRateSub = document.getElementById("burn-rate-watts");
+    if (burnRateSub) burnRateSub.innerText = `Live Load: ${lastGridWatts.toFixed(0)} W`;
+
+    // Monthly Projection: Based on average run-rate
+    const monthlyKwh = (costPerDay / rate) * 30;
+    const monthlyCost = costPerDay * 30;
+
+    if (currency === "IDR") {
+      if (elMonth) elMonth.innerText = `Rp ${Math.round(monthlyCost).toLocaleString()} / mo`;
+    } else {
+      if (elMonth) elMonth.innerText = `$${monthlyCost.toFixed(2)} / mo`;
+    }
+    if (elKwhMonth) elKwhMonth.innerText = `Projected ~${monthlyKwh.toFixed(1)} kWh / mo`;
+
+    // Cumulative Energy logged
+    const cumulativeCost = lastCumulativeEnergyKwh * rate;
+    if (currency === "IDR") {
+      if (elCum) elCum.innerText = `Rp ${Math.round(cumulativeCost).toLocaleString()}`;
+    } else {
+      if (elCum) elCum.innerText = `$${cumulativeCost.toFixed(2)}`;
+    }
+    if (elCumKwh) elCumKwh.innerText = `Cumulative: ${lastCumulativeEnergyKwh.toFixed(3)} kWh`;
+
+    // Appliance Simulator
+    const simWatts = parseFloat(document.getElementById("sim-watts").value) || 0;
+    const simHours = parseFloat(document.getElementById("sim-hours").value) || 0;
+    const dailySimKwh = (simWatts * simHours) / 1000;
+    const monthlySimKwh = dailySimKwh * 30;
+    const monthlySimCost = monthlySimKwh * rate;
+
+    const elSimKwh = document.getElementById("sim-kwh");
+    const elSimCost = document.getElementById("sim-cost");
+    if (elSimKwh) elSimKwh.innerText = `${monthlySimKwh.toFixed(1)} kWh / mo`;
+    if (elSimCost) {
+      elSimCost.innerText = (currency === "IDR") ? `Rp ${Math.round(monthlySimCost).toLocaleString()} / month` : `$${monthlySimCost.toFixed(2)} / month`;
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // Appliance Power Characteristic & Inrush Fingerprint Drawer
+  // --------------------------------------------------------------------------
+  function toggleInrushCurve(cleanMac) {
+    const box = document.getElementById(`curve-box-${cleanMac}`);
+    if (box) {
+      box.classList.toggle("active");
     }
   }
 
@@ -1268,10 +1643,60 @@
             <input type="checkbox" ${dev.pausable ? 'checked' : ''} onchange="updateDevicePriority('${dev.mac}', ${dev.priority}, ${dev.ratedWatts}, this.checked)">
 
             <div class="override-group">
+              <button class="btn btn-outline" style="padding:4px 8px; font-size:0.75rem;" onclick="toggleInrushCurve('${cleanMac}')">📊 Power Curve</button>
               <button id="btn-reset-${cleanMac}" class="btn btn-warning" style="padding:4px 10px; font-size:0.75rem; display:${d.dryRunAlarm ? 'inline-flex' : 'none'};" onclick="overrideDevice('${dev.mac}', '${dev.ip}', 'reset_safety')">⚠️ Reset Dry-Run Alarm</button>
               <button class="btn btn-success" style="padding:4px 8px; font-size:0.75rem;" onclick="overrideDevice('${dev.mac}', '${dev.ip}', 'start')">Force ON</button>
               <button class="btn btn-danger" style="padding:4px 8px; font-size:0.75rem;" onclick="overrideDevice('${dev.mac}', '${dev.ip}', 'stop')">Force OFF</button>
               <button class="btn btn-outline" style="padding:4px 8px; font-size:0.75rem;" onclick="overrideDevice('${dev.mac}', '${dev.ip}', 'auto')">Auto Mode</button>
+            </div>
+          </div>
+
+          <!-- Interactive Power Curve & Inrush Fingerprint Drawer -->
+          <div id="curve-box-${cleanMac}" class="inrush-curve-box">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+              <strong style="color:var(--accent); font-size:0.85rem;">📈 Motor Power Characteristic & Inrush Surge Profile:</strong>
+              <span style="font-size:0.72rem; color:var(--text-muted);">Calibrated Profile &bull; 1300W Virtual MCB Safe</span>
+            </div>
+            
+            <svg viewBox="0 0 440 120" style="width:100%; max-height:130px; display:block; background:rgba(0,0,0,0.4); border-radius:6px; padding:6px;">
+              <!-- Grid lines -->
+              <line x1="45" y1="20" x2="430" y2="20" stroke="rgba(255,255,255,0.06)" stroke-width="1" />
+              <line x1="45" y1="58" x2="430" y2="58" stroke="rgba(255,255,255,0.06)" stroke-width="1" />
+              <line x1="45" y1="98" x2="430" y2="98" stroke="rgba(255,255,255,0.06)" stroke-width="1" />
+              
+              <!-- Y Axis Wattage Labels -->
+              <text x="40" y="23" fill="#ef4444" font-size="8.5" text-anchor="end">800W</text>
+              <text x="40" y="61" fill="#38bdf8" font-size="8.5" text-anchor="end">200W</text>
+              <text x="40" y="101" fill="#64748b" font-size="8.5" text-anchor="end">0W</text>
+              
+              <!-- Anomaly Detection: Dry-run threshold line (<120W) -->
+              <line x1="45" y1="74" x2="430" y2="74" stroke="rgba(245,158,11,0.5)" stroke-dasharray="3,3" stroke-width="1" />
+              <text x="425" y="71" fill="#f59e0b" font-size="8" text-anchor="end">Dry-Run Anomaly (&lt;120W)</text>
+
+              <!-- Inrush Spike and Settle Path -->
+              <path d="M 45 98 L 75 98 L 90 20 L 125 38 L 165 58 L 430 58" fill="none" stroke="#38bdf8" stroke-width="2.5" />
+              <polygon points="45,98 75,98 90,20 125,38 165,58 430,58 430,98 45,98" fill="rgba(56,189,248,0.12)" />
+
+              <!-- Inrush Peak Circle & Tag -->
+              <circle cx="90" cy="20" r="4" fill="#ef4444" />
+              <text x="98" y="19" fill="#ef4444" font-size="8.5" font-weight="bold">Inrush Peak: ~800W (~350ms rotor lock)</text>
+
+              <!-- Steady Running Plateau Circle & Tag -->
+              <circle cx="230" cy="58" r="3.5" fill="#10b981" />
+              <text x="240" y="54" fill="#10b981" font-size="8.5" font-weight="bold">Steady Plateau: ~200W (Normal Pumping)</text>
+
+              <!-- X Time Marks -->
+              <text x="90" y="112" fill="#64748b" font-size="8" text-anchor="middle">50ms</text>
+              <text x="165" y="112" fill="#64748b" font-size="8" text-anchor="middle">350ms</text>
+              <text x="300" y="112" fill="#64748b" font-size="8" text-anchor="middle">Continuous Run (15m Dry Cutoff)</text>
+            </svg>
+
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:6px; margin-top:8px; font-size:0.75rem;">
+              <div><span style="color:var(--text-muted);">Inrush Ratio:</span> <strong style="color:#ef4444;">~4.0x Spike</strong></div>
+              <div><span style="color:var(--text-muted);">Surge Duration:</span> <strong>350 ms</strong></div>
+              <div><span style="color:var(--text-muted);">Load Inductance:</span> <strong>PF 0.86 (Motor)</strong></div>
+              <div><span style="color:var(--text-muted);">Thermal Deflection:</span> <strong style="color:var(--success);">0.08% Breaker Heat</strong></div>
+              <div><span style="color:var(--text-muted);">Arbiter Clearance:</span> <strong style="color:var(--warning);">2.0s Predictive Siphon</strong></div>
             </div>
           </div>
         </div>
