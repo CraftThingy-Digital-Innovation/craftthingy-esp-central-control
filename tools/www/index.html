@@ -1540,11 +1540,15 @@
     return grid;
   }
 
+  const satelliteInFlight = {};
   async function fetchSatelliteTelemetry(ip, mac) {
-    if (!ip || ip === "--" || ip === "0.0.0.0") return;
+    if (!ip || ip === "--" || ip === "0.0.0.0" || satelliteInFlight[mac]) return;
+    satelliteInFlight[mac] = true;
     try {
       const ctrl = new AbortController();
-      const tid = setTimeout(() => ctrl.abort(), 1800);
+      const tid = setTimeout(() => {
+        try { ctrl.abort(new Error("Request timed out")); } catch(_) { ctrl.abort(); }
+      }, 4000);
       const res = await fetch(`http://${ip}/api/v1/system/status`, { signal: ctrl.signal });
       clearTimeout(tid);
       if (res.ok) {
@@ -1602,14 +1606,26 @@
     } catch(e) {
       const cleanMac = getCleanMacId(mac);
       const box = document.getElementById(`telem-box-${cleanMac}`);
-      if (box && (!satelliteTelemetryCache[mac] || Date.now() - satelliteTelemetryCache[mac].ts > 8000)) {
-        box.innerHTML = `<div style="font-size:0.75rem; color:var(--danger); padding:4px 0;">⚠️ Node unreachable at ${ip} (${e.message})</div>`;
-        const badge = document.getElementById(`badge-${cleanMac}`);
-        if (badge) {
-          badge.className = "badge danger";
-          badge.innerText = "OFFLINE";
+      const isTimeout = e.name === "AbortError" || (e.message && e.message.toLowerCase().includes("abort"));
+      const friendlyErr = isTimeout ? "Awaiting node response (busy or sleeping)..." : e.message;
+
+      if (box) {
+        if (satelliteTelemetryCache[mac] && (Date.now() - satelliteTelemetryCache[mac].ts < 45000)) {
+          // Keep showing cached data to avoid flickering or collapse
+        } else {
+          box.innerHTML = `<div style="font-size:0.75rem; color:var(--text-muted); padding:4px 0; display:flex; align-items:center; gap:6px;">
+            <span style="display:inline-block; width:7px; height:7px; border-radius:50%; background:#f59e0b;"></span>
+            <span>Satellite at ${ip} synchronizing (${friendlyErr})</span>
+          </div>`;
+          const badge = document.getElementById(`badge-${cleanMac}`);
+          if (badge) {
+            badge.className = "badge warn";
+            badge.innerText = "SYNCHRONIZING";
+          }
         }
       }
+    } finally {
+      satelliteInFlight[mac] = false;
     }
   }
 
