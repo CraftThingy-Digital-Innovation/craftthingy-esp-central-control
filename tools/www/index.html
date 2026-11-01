@@ -1053,15 +1053,20 @@
     }).join("");
   }
 
+  const DEFAULT_KEY = "a1b2c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff00";
+
   async function postCommand(cmd, payload = "") {
     try {
       const res = await fetch(`${BASE_URL}/api/v1/device/command`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${DEFAULT_KEY}`
+        },
         body: JSON.stringify({ cmd, payload })
       });
       const data = await res.json();
-      showToast(data.message || "Command executed");
+      showToast(data.message || (data.data && data.data.message) || "Command executed");
       fetchStatus();
     } catch (e) {
       showToast("Error executing command: " + e.message);
@@ -1088,11 +1093,20 @@
     try {
       const res = await fetch(`${BASE_URL}/api/v1/device/command`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${DEFAULT_KEY}`
+        },
         body: JSON.stringify({ cmd: "discover_nodes", payload: "" })
       });
       const data = await res.json();
-      const disc = (data.discovered || (data.data && data.data.discovered)) || [];
+      let disc = [];
+      if (data.discovered) disc = data.discovered;
+      else if (data.data && data.data.discovered) disc = data.data.discovered;
+      else if (data.data && typeof data.data.message === "string" && data.data.message.includes("discovered")) {
+        try { disc = JSON.parse(data.data.message).discovered || []; } catch(e){}
+      }
+
       const box = document.getElementById("discovered-nodes-box");
       const list = document.getElementById("discovered-list");
 
@@ -1106,13 +1120,20 @@
       list.innerHTML = disc.map(node => `
         <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.3); padding:8px 12px; border-radius:6px;">
           <div>
-            <strong>${node.host}</strong> (${node.ip}:${node.port})
-            <span style="font-size:0.75rem; color:var(--text-muted); margin-left:8px;">${node.isPaired ? 'Already Paired' : 'Unadopted'}</span>
+            <strong>${node.name || node.host}</strong> (${node.ip}:${node.port || 80})
+            <span style="font-size:0.75rem; color:${node.autoAdopted ? 'var(--success)' : 'var(--text-muted)'}; margin-left:8px;">
+              ${node.autoAdopted ? '✅ Auto-Adopted' : (node.isPaired ? 'Already Paired' : 'Discovered')}
+            </span>
           </div>
-          ${!node.isPaired ? `<button class="btn btn-primary" style="padding:4px 8px; font-size:0.75rem;" onclick="adoptNode('${node.ip}', '${node.host}')">Pair Node</button>` : ''}
+          <span class="badge online" style="font-size:0.75rem;">${node.role || 'Active'}</span>
         </div>
       `).join("");
+      showToast(`Auto-discovered and paired ${disc.length} appliance(s)!`);
+      fetchStatus();
     } catch (e) {
+      showToast("Discovery error: " + e.message);
+    }
+  }
       showToast("Discovery error: " + e.message);
     }
   }

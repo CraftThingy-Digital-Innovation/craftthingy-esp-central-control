@@ -352,6 +352,18 @@ public:
         return _learner;
     }
 
+    int findDeviceIndex(const char* mac) const {
+        if (!mac) return -1;
+        for (uint8_t i = 0; i < _deviceCount; i++) {
+            if (strcasecmp(_devices[i].mac, mac) == 0) return i;
+        }
+        return -1;
+    }
+
+    bool isDeviceRegistered(const char* mac) const {
+        return findDeviceIndex(mac) >= 0;
+    }
+
 private:
     PowerProfileConfig  _profile;
     uint32_t            _tokenCounter;
@@ -364,14 +376,6 @@ private:
 
     VirtualMcbModel     _mcb;
     ApplianceLearner    _learner;
-
-    int findDeviceIndex(const char* mac) {
-        if (!mac) return -1;
-        for (uint8_t i = 0; i < _deviceCount; i++) {
-            if (strcasecmp(_devices[i].mac, mac) == 0) return i;
-        }
-        return -1;
-    }
 
     void addActiveToken(const PowerPermitToken& token) {
         if (_activeTokenCount < MAX_REGISTERED_DEVICES) {

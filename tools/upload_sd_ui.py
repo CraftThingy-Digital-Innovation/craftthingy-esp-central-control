@@ -31,3 +31,4 @@ if __name__ == "__main__":
     host = sys.argv[1] if len(sys.argv) > 1 else "192.168.2.148"
     local_file = os.path.join(os.path.dirname(__file__), "www", "index.html")
     upload_file(host, local_file, "/www/index.html")
+

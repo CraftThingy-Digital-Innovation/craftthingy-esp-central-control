@@ -60,6 +60,13 @@ public:
                       _arbiter.getProfile().effectiveCeilingWatts,
                       _arbiter.getProfile().maxWatts,
                       _arbiter.getProfile().thermalBufferPct);
+
+        if (MDNS.begin("craftthingy-central")) {
+            MDNS.addService("craftthingy", "tcp", 80);
+            MDNS.addService("http", "tcp", 80);
+            Serial.println(F("[INIT] mDNS responder started: craftthingy-central.local"));
+        }
+
         Serial.println(F("[INIT] System ready. Commencing 1Hz energy monitoring & load arbitration."));
     }
 
@@ -122,6 +129,14 @@ public:
             if (PIN_LED_STATUS >= 0) digitalWrite(PIN_LED_STATUS, LOW);
         }
 
+        // Background Auto-Discovery Loop (every 45 seconds or every 10s if pairing window active)
+        static uint32_t lastAutoDiscoverMs = 0;
+        uint32_t discoverInterval = _pairingWindowActive ? 10000 : 45000;
+        if (WiFi.status() == WL_CONNECTED && (millis() - lastAutoDiscoverMs >= discoverInterval)) {
+            lastAutoDiscoverMs = millis();
+            scanNetworkNodes();
+        }
+
         // Alarm Buzzer & Status LED logic (safely skipped if pins are -1)
         handleSurgeAlarm();
 
@@ -176,6 +191,15 @@ public:
             if (dur == 0) dur = 300;
 
             if (mac.length() > 0) {
+                // If device is not yet registered in Arbiter, auto-adopt it!
+                if (_arbiter.findDeviceIndex(mac.c_str()) < 0) {
+                    String devRole = parseField(payload, "role");
+                    if (devRole.length() == 0) devRole = "appliance";
+                    String devName = (devRole == "water_pump") ? "Water Pump" : "Smart Appliance";
+                    AppliancePriority prio = (devRole == "water_pump") ? PRIORITY_HIGH : PRIORITY_NORMAL;
+                    _arbiter.registerOrUpdateAppliance(mac.c_str(), devName.c_str(), devRole.c_str(), prio, watts, true, ip.length() > 0 ? ip.c_str() : nullptr);
+                    Serial.printf("[AUTO-ADOPT] Auto-registered unadopted node %s (%s) upon permit request\n", devName.c_str(), mac.c_str());
+                }
                 _arbiter.updateHeartbeat(mac.c_str(), ip.length() > 0 ? ip.c_str() : nullptr, (int8_t)rssi);
             }
 
@@ -612,28 +636,95 @@ private:
         return true;
     }
 
+    bool probeAndAdoptNode(const IPAddress& ip, String& outName, String& outMac, String& outRole) {
+        if (ip == WiFi.localIP() || ip == IPAddress(0, 0, 0, 0)) return false;
+
+        HTTPClient http;
+        http.begin("http://" + ip.toString() + "/api/v1/system/status");
+        http.setTimeout(1200);
+        int code = http.GET();
+        if (code != 200) {
+            http.end();
+            return false;
+        }
+
+        String res = http.getString();
+        http.end();
+
+        // Check CraftThingy signature
+        if (res.indexOf("craftthingy") < 0 && res.indexOf("CraftThingy") < 0 && res.indexOf("coreVersion") < 0) {
+            return false;
+        }
+
+        outMac = parseField(res, "mac");
+        outName = parseField(res, "name");
+        outRole = parseField(res, "role");
+        if (outRole.length() == 0) outRole = "appliance";
+        if (outName.length() == 0) outName = (outRole == "water_pump") ? "Water Pump" : "Smart Appliance";
+
+        // Auto-adopt into Arbiter!
+        if (outMac.length() > 0) {
+            AppliancePriority prio = (outRole == "water_pump") ? PRIORITY_HIGH : PRIORITY_NORMAL;
+            float watts = (outRole == "water_pump") ? 280.0f : 500.0f;
+            _arbiter.registerOrUpdateAppliance(outMac.c_str(), outName.c_str(), outRole.c_str(), prio, watts, true, ip.toString().c_str());
+            _arbiter.updateHeartbeat(outMac.c_str(), ip.toString().c_str(), 0);
+            Serial.printf("[AUTO-DISCOVERY] Successfully probed & adopted %s (%s) at %s [Role: %s, Priority: %d]\n",
+                          outName.c_str(), outMac.c_str(), ip.toString().c_str(), outRole.c_str(), (int)prio);
+            return true;
+        }
+        return false;
+    }
+
     String scanNetworkNodes() {
         String json = "{\"status\":\"success\",\"discovered\":[";
-        int n = MDNS.queryService("http", "tcp");
         bool first = true;
+
+        // 1. Direct mDNS Host Lookup for standard CraftThingy roles
+        const char* knownHosts[] = {
+            "craftthingy-water-pump",
+            "craftthingy-device",
+            "craftthingy-pump",
+            "craftthingy-ac",
+            "craftthingy-ev"
+        };
+        for (size_t k = 0; k < sizeof(knownHosts) / sizeof(knownHosts[0]); k++) {
+            IPAddress targetIp = MDNS.queryHost(knownHosts[k], 1000);
+            if (targetIp != IPAddress(0, 0, 0, 0) && targetIp != WiFi.localIP()) {
+                String name, mac, role;
+                if (probeAndAdoptNode(targetIp, name, mac, role)) {
+                    if (!first) json += ",";
+                    first = false;
+                    json += "{";
+                    json += "\"host\":\"" + String(knownHosts[k]) + ".local\",";
+                    json += "\"ip\":\"" + targetIp.toString() + "\",";
+                    json += "\"port\":80,";
+                    json += "\"isPaired\":true,";
+                    json += "\"autoAdopted\":true,";
+                    json += "\"role\":\"" + role + "\",";
+                    json += "\"name\":\"" + name + "\",";
+                    json += "\"mac\":\"" + mac + "\"";
+                    json += "}";
+                }
+            }
+        }
+
+        // 2. Query mDNS PTR services
+        int n = MDNS.queryService("http", "tcp");
         for (int i = 0; i < n; ++i) {
             String host = MDNS.hostname(i);
             IPAddress ip = MDNS.IP(i);
             uint16_t port = MDNS.port(i);
+            if (ip == WiFi.localIP() || ip == IPAddress(0, 0, 0, 0)) continue;
 
-            if (!first) json += ",";
-            first = false;
-            json += "{";
-            json += "\"host\":\"" + host + "\",";
-            json += "\"ip\":\"" + ip.toString() + "\",";
-            json += "\"port\":" + String(port) + ",";
+            String name, mac, role;
+            bool adopted = probeAndAdoptNode(ip, name, mac, role);
 
             // Match against registered appliances
             uint8_t count = 0;
             const RegisteredAppliance* devs = _arbiter.getDevices(count);
             bool isPaired = false;
-            String pairedRole = "";
-            String pairedMac = "";
+            String pairedRole = role;
+            String pairedMac = mac;
             for (uint8_t d = 0; d < count; d++) {
                 if (String(devs[d].ip) == ip.toString()) {
                     isPaired = true;
@@ -642,11 +733,21 @@ private:
                     break;
                 }
             }
+
+            if (!first) json += ",";
+            first = false;
+            json += "{";
+            json += "\"host\":\"" + host + "\",";
+            json += "\"ip\":\"" + ip.toString() + "\",";
+            json += "\"port\":" + String(port) + ",";
             json += "\"isPaired\":" + String(isPaired ? "true" : "false") + ",";
+            json += "\"autoAdopted\":" + String(adopted ? "true" : "false") + ",";
             json += "\"role\":\"" + pairedRole + "\",";
+            json += "\"name\":\"" + name + "\",";
             json += "\"mac\":\"" + pairedMac + "\"";
             json += "}";
         }
+
         json += "]}";
         return json;
     }
