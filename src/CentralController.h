@@ -613,6 +613,17 @@ private:
         // Total Central PZEM telemetry
         float centralPower = _pzem.getTelemetry().power;
 
+        // Resolve device dynamic electrical signature
+        ApplianceSignature* sig = _arbiter.getLearner().getSignature(dev.mac);
+        float expectedWatts = (sig && sig->learnedSteadyWatts > 30.0f) ? sig->learnedSteadyWatts : dev.ratedWatts;
+        if (expectedWatts < 40.0f) expectedWatts = 280.0f; // safety floor
+
+        // Dynamic thresholds derived proportionally from learned/rated power curve:
+        // - Cavitation cutoff: < 55% of continuous operating load (free rotor air spin)
+        // - Loaded threshold: >= 70% of continuous operating load (viscous fluid displacement)
+        float cavitationCutoffWatts = expectedWatts * 0.55f;
+        float loadedThresholdWatts = expectedWatts * 0.70f;
+
         // -------------------------------------------------------------
         // Pump is actively running: evaluate power health & lease
         // -------------------------------------------------------------
@@ -624,27 +635,29 @@ private:
                 bool isLoaded = false;
 
                 if (hasSatPzem) {
-                    if (satellitePower > 5.0f && satellitePower < 120.0f) {
+                    if (satellitePower > 5.0f && satellitePower < cavitationCutoffWatts) {
                         isCavitating = true;
-                    } else if (satellitePower >= 150.0f) {
+                    } else if (satellitePower >= loadedThresholdWatts) {
                         isLoaded = true;
                     }
                 } else {
-                    // Central PZEM assessment
-                    if (centralPower >= dev.ratedWatts * 0.5f) {
+                    // Central PZEM assessment against expected load
+                    if (centralPower >= loadedThresholdWatts) {
                         isLoaded = true;
                     }
                 }
 
                 if (isCavitating) {
-                    Serial.println(F("[SUPERVISOR] Cavitation / dry run detected on Water Pump (<120W)! Sending trip_dry_run..."));
+                    Serial.printf("[SUPERVISOR] Cavitation / dry run detected on %s: %.1fW is below dynamic threshold (%.1fW)! Tripping...\n",
+                                  dev.name, satellitePower, cavitationCutoffWatts);
                     postSatelliteCommand(dev.ip, "trip_dry_run", "cavitation_detected");
                 } else if (isLoaded || !hasSatPzem) {
                     // Healthy pumping! Extend lease so the pump never falsely trips 15m timeout while filling
                     static uint32_t lastLeaseGrantMs = 0;
                     if (millis() - lastLeaseGrantMs >= 25000) { // grant lease renewal every 25-30s
                         lastLeaseGrantMs = millis();
-                        Serial.println(F("[SUPERVISOR] Water pump running healthy. Extending runtime lease by 180s..."));
+                        Serial.printf("[SUPERVISOR] %s power healthy (%.1fW >= %.1fW). Extending runtime lease by 180s...\n",
+                                      dev.name, hasSatPzem ? satellitePower : centralPower, loadedThresholdWatts);
                         postSatelliteCommand(dev.ip, "extend_lease", "180");
                     }
                 }
