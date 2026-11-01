@@ -311,9 +311,9 @@ public:
             }
         }
 
-        // 5. Device heartbeat timeouts (60 seconds)
+        // 5. Device heartbeat timeouts (300 seconds / 5 minutes)
         for (uint8_t i = 0; i < _deviceCount; i++) {
-            if (_devices[i].isOnline && (now - _devices[i].lastSeenMillis > 60000)) {
+            if (_devices[i].isOnline && (now - _devices[i].lastSeenMillis > 300000)) {
                 _devices[i].isOnline = false;
             }
         }

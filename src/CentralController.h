@@ -129,6 +129,26 @@ public:
             if (PIN_LED_STATUS >= 0) digitalWrite(PIN_LED_STATUS, LOW);
         }
 
+        // Periodic Satellite Heartbeat Supervisor (Active ping every 20 seconds)
+        static uint32_t lastSatelliteProbeMs = 0;
+        if (WiFi.status() == WL_CONNECTED && (millis() - lastSatelliteProbeMs >= 20000)) {
+            lastSatelliteProbeMs = millis();
+            uint8_t count = 0;
+            const RegisteredAppliance* devs = _arbiter.getDevices(count);
+            for (uint8_t i = 0; i < count; i++) {
+                if (strlen(devs[i].ip) > 0 && strcmp(devs[i].ip, "--") != 0 && strcmp(devs[i].ip, "0.0.0.0") != 0) {
+                    HTTPClient http;
+                    http.begin("http://" + String(devs[i].ip) + "/api/v1/system/status");
+                    http.setTimeout(350);
+                    int code = http.GET();
+                    if (code == 200) {
+                        _arbiter.updateHeartbeat(devs[i].mac, devs[i].ip);
+                    }
+                    http.end();
+                }
+            }
+        }
+
         // Background Auto-Discovery Loop (only when pairing gate is open)
         static uint32_t lastAutoDiscoverMs = 0;
         if (_pairingWindowActive && WiFi.status() == WL_CONNECTED && (millis() - lastAutoDiscoverMs >= 10000)) {
@@ -209,6 +229,14 @@ public:
             uint32_t tokenId = (uint32_t)payload.toInt();
             bool released = _arbiter.releasePermit(tokenId);
             response = released ? "{\"status\":\"success\"}" : "{\"status\":\"error\",\"message\":\"Token not found\"}";
+            return true;
+        }
+
+        if (cmd == "heartbeat") {
+            String mac = parseField(payload, "mac");
+            String ip = parseField(payload, "ip");
+            _arbiter.updateHeartbeat(mac.c_str(), ip.length() > 0 ? ip.c_str() : nullptr);
+            response = "{\"status\":\"success\",\"message\":\"Heartbeat acknowledged\"}";
             return true;
         }
 
