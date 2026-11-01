@@ -155,6 +155,13 @@ public:
         return true;
     }
 
+    void setDeviceOnline(const char* mac, bool isOnline) {
+        int idx = findDeviceIndex(mac);
+        if (idx >= 0) {
+            _devices[idx].isOnline = isOnline;
+        }
+    }
+
     void updateHeartbeat(const char* mac, const char* ip = nullptr, int8_t rssi = 0) {
         int idx = findDeviceIndex(mac);
         if (idx >= 0) {
@@ -311,9 +318,9 @@ public:
             }
         }
 
-        // 5. Device heartbeat timeouts (300 seconds / 5 minutes)
+        // 5. Device heartbeat timeouts (60 seconds)
         for (uint8_t i = 0; i < _deviceCount; i++) {
-            if (_devices[i].isOnline && (now - _devices[i].lastSeenMillis > 300000)) {
+            if (_devices[i].isOnline && (now - _devices[i].lastSeenMillis > 60000)) {
                 _devices[i].isOnline = false;
             }
         }

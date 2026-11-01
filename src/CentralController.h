@@ -149,6 +149,8 @@ public:
                         _arbiter.updateHeartbeat(devs[i].mac, devs[i].ip);
                         String body = http.getString();
                         superviseWaterPumpNode(devs[i], body);
+                    } else {
+                        _arbiter.setDeviceOnline(devs[i].mac, false);
                     }
                     http.end();
                 }
