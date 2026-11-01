@@ -631,7 +631,7 @@ private:
 
         HTTPClient http;
         http.begin("http://" + ip.toString() + "/api/v1/system/status");
-        http.setTimeout(1200);
+        http.setTimeout(400);
         int code = http.GET();
         if (code != 200) {
             http.end();
@@ -672,32 +672,23 @@ private:
             return false;
         };
 
-        // 1. Direct mDNS Host Lookup for standard CraftThingy roles
-        const char* knownHosts[] = {
-            "craftthingy-water-pump",
-            "craftthingy-device",
-            "craftthingy-pump",
-            "craftthingy-ac",
-            "craftthingy-ev"
-        };
-        for (size_t k = 0; k < sizeof(knownHosts) / sizeof(knownHosts[0]); k++) {
-            IPAddress targetIp = MDNS.queryHost(knownHosts[k], 1000);
-            if (targetIp != IPAddress(0, 0, 0, 0) && targetIp != WiFi.localIP()) {
-                String name, mac, role;
-                if (probeNode(targetIp, name, mac, role)) {
-                    bool isPaired = checkPaired(mac, targetIp.toString());
-                    if (!first) json += ",";
-                    first = false;
-                    json += "{";
-                    json += "\"host\":\"" + String(knownHosts[k]) + ".local\",";
-                    json += "\"ip\":\"" + targetIp.toString() + "\",";
-                    json += "\"port\":80,";
-                    json += "\"isPaired\":" + String(isPaired ? "true" : "false") + ",";
-                    json += "\"role\":\"" + role + "\",";
-                    json += "\"name\":\"" + name + "\",";
-                    json += "\"mac\":\"" + mac + "\"";
-                    json += "}";
-                }
+        // 1. Direct fast mDNS Host Lookup for water pump (300ms)
+        IPAddress pumpIp = MDNS.queryHost("craftthingy-water-pump", 300);
+        if (pumpIp != IPAddress(0, 0, 0, 0) && pumpIp != WiFi.localIP()) {
+            String name, mac, role;
+            if (probeNode(pumpIp, name, mac, role)) {
+                bool isPaired = checkPaired(mac, pumpIp.toString());
+                if (!first) json += ",";
+                first = false;
+                json += "{";
+                json += "\"host\":\"craftthingy-water-pump.local\",";
+                json += "\"ip\":\"" + pumpIp.toString() + "\",";
+                json += "\"port\":80,";
+                json += "\"isPaired\":" + String(isPaired ? "true" : "false") + ",";
+                json += "\"role\":\"" + role + "\",";
+                json += "\"name\":\"" + name + "\",";
+                json += "\"mac\":\"" + mac + "\"";
+                json += "}";
             }
         }
 
@@ -707,7 +698,7 @@ private:
             String host = MDNS.hostname(i);
             IPAddress ip = MDNS.IP(i);
             uint16_t port = MDNS.port(i);
-            if (ip == WiFi.localIP() || ip == IPAddress(0, 0, 0, 0)) continue;
+            if (ip == WiFi.localIP() || ip == IPAddress(0, 0, 0, 0) || ip == pumpIp) continue;
 
             String name, mac, role;
             if (probeNode(ip, name, mac, role)) {
