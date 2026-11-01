@@ -347,7 +347,47 @@
     .override-group {
       margin-left: auto;
       display: flex;
+      flex-wrap: wrap;
       gap: 6px;
+    }
+
+    /* Satellite Live Telemetry Grid */
+    .device-telemetry-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+      gap: 8px;
+      margin-top: 6px;
+      padding: 10px 12px;
+      background: rgba(0, 0, 0, 0.25);
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .telemetry-cell {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .telemetry-cell label {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+    }
+    .telemetry-cell .val {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+    @keyframes pulseAlarm {
+      0% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.6; transform: scale(0.98); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+    .badge-alarm {
+      background: rgba(239, 68, 68, 0.2) !important;
+      color: #ef4444 !important;
+      border: 1px solid rgba(239, 68, 68, 0.5);
+      animation: pulseAlarm 1.8s infinite ease-in-out;
     }
 
     /* Toast Notification */
@@ -997,6 +1037,164 @@
     renderDevices(d.devices || []);
   }
 
+  const satelliteTelemetryCache = {};
+
+  function formatDuration(sec) {
+    if (!sec || sec <= 0) return "0s";
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    if (h > 0) return `${h}h ${m}m`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+  }
+
+  function getCleanMacId(mac) {
+    return (mac || "").replace(/[^a-zA-Z0-9]/g, "");
+  }
+
+  function renderTelemetryHtml(dev, cached) {
+    if (!cached || !cached.data) {
+      return `<div style="font-size:0.75rem; color:var(--text-muted); padding:6px 0;">📡 Polling live satellite telemetry from ${dev.ip || 'node'}...</div>`;
+    }
+
+    const sys = cached.data.system || {};
+    const d = cached.data.device || {};
+    const isWaterPump = dev.role === "water_pump" || d.role === "water_pump";
+
+    // Format Water Level
+    let levelHtml = "<span>--</span>";
+    if (isWaterPump && d.tankDemandsFill !== undefined) {
+      if (d.tankDemandsFill) {
+        levelHtml = `<span style="color:var(--warning); font-weight:700;">💧 Tank Empty (Demands Fill)</span>`;
+      } else {
+        levelHtml = `<span style="color:var(--success); font-weight:700;">✅ Tank Full</span>`;
+      }
+    }
+
+    // Format Motor State & Runtime
+    let motorHtml = "<span>--</span>";
+    if (isWaterPump) {
+      if (d.dryRunAlarm) {
+        motorHtml = `<span style="color:var(--danger); font-weight:700;">🚨 Cutoff (Dry-Run)</span>`;
+      } else if (d.pumpRunning) {
+        motorHtml = `<span style="color:var(--success); font-weight:700;">⚡ Running (${formatDuration(d.runDurationSec)})</span>`;
+      } else {
+        motorHtml = `<span>💤 Standby (Idle)</span>`;
+      }
+    }
+
+    // Format Dry Run Status
+    let dryRunHtml = "<span>--</span>";
+    if (isWaterPump) {
+      if (d.dryRunAlarm) {
+        dryRunHtml = `<span style="color:var(--danger); font-weight:700;">⚠️ Tripped (>15m)</span>`;
+      } else {
+        dryRunHtml = `<span style="color:var(--success);">🛡️ Armed (${formatDuration(d.maxRunTimeSec || 900)} max)</span>`;
+      }
+    }
+
+    // Format Uptime
+    const uptimeStr = formatDuration(cached.uptime || cached.data.uptime);
+
+    // Format Firmware & Core
+    const appVer = sys.appVersion ? `v${sys.appVersion}` : '--';
+    const coreVer = sys.coreVersion ? `v${sys.coreVersion}` : '--';
+
+    // Format Hardware & Heap
+    const chipDesc = (sys.chip || sys.boardTarget || "ESP").split(" (")[0];
+    const heapStr = sys.freeHeap ? `${(sys.freeHeap / 1024).toFixed(0)} KB Free` : '--';
+
+    let grid = `
+      <div class="device-telemetry-grid">
+        ${isWaterPump ? `
+          <div class="telemetry-cell">
+            <label>Water Level</label>
+            <div class="val">${levelHtml}</div>
+          </div>
+          <div class="telemetry-cell">
+            <label>Motor State</label>
+            <div class="val">${motorHtml}</div>
+          </div>
+          <div class="telemetry-cell">
+            <label>Dry-Run Protection</label>
+            <div class="val">${dryRunHtml}</div>
+          </div>
+        ` : ''}
+        <div class="telemetry-cell">
+          <label>Device Uptime</label>
+          <div class="val">${uptimeStr}</div>
+        </div>
+        <div class="telemetry-cell">
+          <label>Firmware Version</label>
+          <div class="val" title="App: ${appVer} | Core: ${coreVer}">App ${appVer} <span style="font-size:0.7rem; color:var(--text-muted);">(Core ${coreVer})</span></div>
+        </div>
+        <div class="telemetry-cell">
+          <label>Chip & Free Heap</label>
+          <div class="val">${chipDesc} <span style="font-size:0.7rem; color:var(--text-muted);">(${heapStr})</span></div>
+        </div>
+    `;
+
+    if (d.hasPzem && d.pzemOnline) {
+      grid += `
+        <div class="telemetry-cell">
+          <label>AC Meter</label>
+          <div class="val">${(d.voltage || 0).toFixed(1)}V / ${(d.power || 0).toFixed(0)}W (PF ${(d.powerFactor || 0).toFixed(2)})</div>
+        </div>
+      `;
+    }
+
+    grid += `</div>`;
+    return grid;
+  }
+
+  async function fetchSatelliteTelemetry(ip, mac) {
+    if (!ip || ip === "--" || ip === "0.0.0.0") return;
+    try {
+      const ctrl = new AbortController();
+      const tid = setTimeout(() => ctrl.abort(), 1800);
+      const res = await fetch(`http://${ip}/api/v1/system/status`, { signal: ctrl.signal });
+      clearTimeout(tid);
+      if (res.ok) {
+        const json = await res.json();
+        satelliteTelemetryCache[mac] = {
+          ts: Date.now(),
+          uptime: json.uptime,
+          data: json.data || {}
+        };
+        const cleanMac = getCleanMacId(mac);
+        const box = document.getElementById(`telem-box-${cleanMac}`);
+        if (box) {
+          box.innerHTML = renderTelemetryHtml({ mac: mac, ip: ip, role: (json.data && json.data.device && json.data.device.role) || "water_pump" }, satelliteTelemetryCache[mac]);
+        }
+        const badge = document.getElementById(`badge-${cleanMac}`);
+        if (badge) {
+          const d = json.data && json.data.device;
+          if (d && d.dryRunAlarm) {
+            badge.className = "badge badge-alarm";
+            badge.innerText = "🚨 DRY-RUN ALARM";
+          } else if (d && d.pumpRunning) {
+            badge.className = "badge online";
+            badge.innerText = `⚡ RUNNING (${d.runDurationSec || 0}s)`;
+          } else if (d && d.tankDemandsFill) {
+            badge.className = "badge warn";
+            badge.innerText = "💧 TANK EMPTY (Needs Fill)";
+          } else {
+            badge.className = "badge online";
+            badge.innerText = "✅ STANDBY";
+          }
+        }
+        const rstBtn = document.getElementById(`btn-reset-${cleanMac}`);
+        if (rstBtn) {
+          const d = json.data && json.data.device;
+          rstBtn.style.display = (d && d.dryRunAlarm) ? "inline-flex" : "none";
+        }
+      }
+    } catch(e) {
+      // Node unreachable or timeout
+    }
+  }
+
   function renderDevices(devs) {
     const list = document.getElementById("device-list");
     if (!devs || devs.length === 0) {
@@ -1007,12 +1205,35 @@
     }
 
     list.innerHTML = devs.map(dev => {
+      const cleanMac = getCleanMacId(dev.mac);
+      const cached = satelliteTelemetryCache[dev.mac];
+      const d = (cached && cached.data && cached.data.device) || {};
+
       let stateClass = "";
-      let stateLabel = "STANDBY";
-      if (dev.activePermit) { stateClass = "active-permit"; stateLabel = "ACTIVE PERMIT (Running)"; }
-      else if (!dev.online) { stateLabel = "OFFLINE"; }
+      let stateBadgeClass = dev.online ? "online" : "danger";
+      let stateLabel = dev.online ? "STANDBY" : "OFFLINE";
+
+      if (d.dryRunAlarm) {
+        stateClass = "paused";
+        stateBadgeClass = "badge-alarm";
+        stateLabel = "🚨 DRY-RUN ALARM";
+      } else if (d.pumpRunning || dev.activePermit) {
+        stateClass = "active-permit";
+        stateBadgeClass = "online";
+        stateLabel = d.pumpRunning ? `⚡ RUNNING (${d.runDurationSec || 0}s)` : "ACTIVE PERMIT (Running)";
+      } else if (d.tankDemandsFill) {
+        stateBadgeClass = "warn";
+        stateLabel = "💧 TANK EMPTY";
+      }
 
       const isWaterPump = dev.role === "water_pump";
+
+      // Trigger async background poll for live telemetry
+      if (dev.online && dev.ip && dev.ip !== "--") {
+        if (!cached || (Date.now() - cached.ts > 2500)) {
+          fetchSatelliteTelemetry(dev.ip, dev.mac);
+        }
+      }
 
       return `
         <div class="device-item ${stateClass}">
@@ -1021,13 +1242,17 @@
               <div class="device-icon">${isWaterPump ? '💧' : '🔌'}</div>
               <div class="device-info">
                 <h4>${dev.name || dev.role}</h4>
-                <span>MAC: ${dev.mac} | IP: ${dev.ip || '--'} | State: <strong>${stateLabel}</strong></span>
+                <span>MAC: ${dev.mac} | IP: ${dev.ip || '--'} | Signal: ${dev.rssi || -60} dBm | Base: <strong>${dev.ratedWatts.toFixed(0)}W</strong></span>
               </div>
             </div>
-            <div style="display:flex; gap: 6px;">
-              <span class="badge ${dev.online ? 'online' : 'danger'}">${dev.online ? 'Online' : 'Offline'}</span>
+            <div style="display:flex; gap: 6px; align-items:center;">
+              <span id="badge-${cleanMac}" class="badge ${stateBadgeClass}">${stateLabel}</span>
               <button class="btn btn-outline" style="padding:4px 8px; font-size:0.75rem;" onclick="quarantineDevice('${dev.mac}')">Revoke</button>
             </div>
+          </div>
+
+          <div id="telem-box-${cleanMac}">
+            ${renderTelemetryHtml(dev, cached)}
           </div>
 
           <div class="device-controls">
@@ -1043,6 +1268,7 @@
             <input type="checkbox" ${dev.pausable ? 'checked' : ''} onchange="updateDevicePriority('${dev.mac}', ${dev.priority}, ${dev.ratedWatts}, this.checked)">
 
             <div class="override-group">
+              <button id="btn-reset-${cleanMac}" class="btn btn-warning" style="padding:4px 10px; font-size:0.75rem; display:${d.dryRunAlarm ? 'inline-flex' : 'none'};" onclick="overrideDevice('${dev.mac}', '${dev.ip}', 'reset_safety')">⚠️ Reset Dry-Run Alarm</button>
               <button class="btn btn-success" style="padding:4px 8px; font-size:0.75rem;" onclick="overrideDevice('${dev.mac}', '${dev.ip}', 'start')">Force ON</button>
               <button class="btn btn-danger" style="padding:4px 8px; font-size:0.75rem;" onclick="overrideDevice('${dev.mac}', '${dev.ip}', 'stop')">Force OFF</button>
               <button class="btn btn-outline" style="padding:4px 8px; font-size:0.75rem;" onclick="overrideDevice('${dev.mac}', '${dev.ip}', 'auto')">Auto Mode</button>
