@@ -3,6 +3,7 @@ import urllib.request
 import urllib.parse
 import os
 import sys
+import time
 
 def upload_file(host, local_path, remote_path, chunk_size=4096):
     with open(local_path, "r", encoding="utf-8") as f:
@@ -17,13 +18,22 @@ def upload_file(host, local_path, remote_path, chunk_size=4096):
         url = f"http://{host}/api/v1/sd/write?path={urllib.parse.quote(remote_path)}&append={is_append}"
         data = urllib.parse.urlencode({"content": chunk}).encode("utf-8")
         req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/x-www-form-urlencoded"})
-        try:
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                res_body = resp.read().decode("utf-8")
-                print(f"  Chunk {i//chunk_size + 1} ({len(chunk)} B): {res_body}")
-        except Exception as e:
-            print(f"  Error at chunk {i}: {e}")
+        success = False
+        for attempt in range(4):
+            try:
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    res_body = resp.read().decode("utf-8")
+                    print(f"  Chunk {i//chunk_size + 1}/{total_len//chunk_size + 1} ({len(chunk)} B): {res_body}")
+                    success = True
+                    break
+            except Exception as e:
+                print(f"  Attempt {attempt+1} failed at chunk {i}: {e}. Retrying...")
+                time.sleep(0.3)
+
+        if not success:
+            print(f"  Failed permanently at chunk {i}")
             sys.exit(1)
+        time.sleep(0.05)
 
     print("Upload complete!")
 

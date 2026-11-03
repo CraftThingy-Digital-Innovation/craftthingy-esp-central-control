@@ -22,6 +22,8 @@ public:
     }
 
     bool begin() {
+        SD.end(); // Clean up any stale SD card handle / SPI lock before re-initializing
+        delay(10);
         pinMode(PIN_SD_CS, OUTPUT);
         digitalWrite(PIN_SD_CS, HIGH);
 

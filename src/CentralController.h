@@ -129,28 +129,25 @@ public:
             if (PIN_LED_STATUS >= 0) digitalWrite(PIN_LED_STATUS, LOW);
         }
 
-        // Periodic Satellite Heartbeat & Smart Dry-Run Supervisor (every 10 seconds)
+        // Periodic Satellite Heartbeat & Smart Dry-Run Supervisor (every 5 seconds)
         static uint32_t lastSatelliteProbeMs = 0;
-        if (WiFi.status() == WL_CONNECTED && (millis() - lastSatelliteProbeMs >= 10000)) {
+        if (WiFi.status() == WL_CONNECTED && (millis() - lastSatelliteProbeMs >= 5000)) {
             lastSatelliteProbeMs = millis();
             uint8_t count = 0;
             const RegisteredAppliance* devs = _arbiter.getDevices(count);
             for (uint8_t i = 0; i < count; i++) {
-                // Only poll online devices to prevent TCP connect stall on offline IPs
-                if (devs[i].isOnline && strlen(devs[i].ip) > 0 && strcmp(devs[i].ip, "--") != 0 && strcmp(devs[i].ip, "0.0.0.0") != 0) {
+                if (strlen(devs[i].ip) > 0 && strcmp(devs[i].ip, "--") != 0 && strcmp(devs[i].ip, "0.0.0.0") != 0) {
                     WiFiClient client;
-                    client.setTimeout(1);
+                    client.setTimeout(2);
                     HTTPClient http;
-                    http.setConnectTimeout(350);
+                    http.setConnectTimeout(600);
                     http.begin(client, "http://" + String(devs[i].ip) + "/api/v1/system/status");
-                    http.setTimeout(450);
+                    http.setTimeout(1200);
                     int code = http.GET();
                     if (code == 200) {
                         _arbiter.updateHeartbeat(devs[i].mac, devs[i].ip);
                         String body = http.getString();
                         superviseWaterPumpNode(devs[i], body);
-                    } else {
-                        _arbiter.setDeviceOnline(devs[i].mac, false);
                     }
                     http.end();
                 }
@@ -629,6 +626,40 @@ private:
         ApplianceSignature* sig = _arbiter.getLearner().getSignature(dev.mac);
         float expectedWatts = (sig && sig->learnedSteadyWatts > 30.0f) ? sig->learnedSteadyWatts : dev.ratedWatts;
         if (expectedWatts < 40.0f) expectedWatts = 280.0f; // safety floor
+
+        // -------------------------------------------------------------
+        // MCB Thermal Safety & Active Load Siphoning Arbiter
+        // -------------------------------------------------------------
+        float ceilingWatts = _arbiter.getProfile().effectiveCeilingWatts;
+        bool gridOverloaded = _arbiter.isSurgeAlertActive() || _arbiter.getMcb().isNearTripThreshold() || (centralPower >= ceilingWatts);
+
+        if (gridOverloaded) {
+            if (pumpRunning && dev.isPausable) {
+                Serial.printf("[SUPERVISOR] Grid overloaded (%.1fW >= %.1fW, MCB Heat: %d%%). Siphoning/interrupting %s to prevent physical MCB trip!\n",
+                              centralPower, ceilingWatts, _arbiter.getMcb().getThermalHeatPct(), dev.name);
+                postSatelliteCommand(dev.ip, "interrupt", "mcb_overload_protection");
+                return;
+            }
+        }
+
+        // Automatic Recovery: When grid load is safely below ceiling with margin:
+        if (!gridOverloaded && !_arbiter.getMcb().isBreakerHot() && (centralPower + expectedWatts * 1.5f < ceilingWatts)) {
+            bool tankDemandsFill = (statusJson.indexOf("\"tankDemandsFill\":true") >= 0);
+            bool isInterrupted = (statusJson.indexOf("\"interrupted\":true") >= 0);
+            bool isDryRun = (statusJson.indexOf("\"dryRunAlarm\":true") >= 0);
+            bool isCooldown = (statusJson.indexOf("\"cooldownActive\":true") >= 0);
+
+            // If tank needs water and device was interrupted, restore AUTO mode smoothly!
+            if (!pumpRunning && isInterrupted && tankDemandsFill && !isDryRun && !isCooldown) {
+                static uint32_t lastResumeAttemptMs = 0;
+                if (millis() - lastResumeAttemptMs >= 15000) {
+                    lastResumeAttemptMs = millis();
+                    Serial.printf("[SUPERVISOR] Grid capacity safe (%.1fW + %.1fW < %.1fW). Resuming %s in AUTO mode...\n",
+                                  centralPower, expectedWatts * 1.5f, ceilingWatts, dev.name);
+                    postSatelliteCommand(dev.ip, "auto", "grid_capacity_restored");
+                }
+            }
+        }
 
         // Dynamic thresholds derived proportionally from learned/rated power curve:
         // - Cavitation cutoff: < 55% of continuous operating load (free rotor air spin)
