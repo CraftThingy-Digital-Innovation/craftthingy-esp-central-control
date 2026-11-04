@@ -1462,10 +1462,11 @@
     // Format Water Level
     let levelHtml = "<span>--</span>";
     if (isWaterPump && d.tankDemandsFill !== undefined) {
+      const pinDesc = d.rawSensor !== undefined ? `<div style="font-size:0.68rem; color:var(--text-muted); font-weight:normal; margin-top:2px;">Pin: GPIO ${d.sensorPin !== undefined ? d.sensorPin : 2} (${d.rawSensor === 1 ? 'HIGH' : 'LOW'}) &bull; ${d.switchClosedWhenEmpty ? 'Closed=Empty' : 'Open=Empty'}</div>` : '';
       if (d.tankDemandsFill) {
-        levelHtml = `<span style="color:var(--warning); font-weight:700;">💧 Tank Empty (Demands Fill)</span>`;
+        levelHtml = `<span style="color:var(--warning); font-weight:700;">💧 Tank Empty (Demands Fill)</span>${pinDesc}`;
       } else {
-        levelHtml = `<span style="color:var(--success); font-weight:700;">✅ Tank Full</span>`;
+        levelHtml = `<span style="color:var(--success); font-weight:700;">✅ Tank Full</span>${pinDesc}`;
       }
     }
 
@@ -1742,6 +1743,7 @@
               <button class="btn btn-success" style="padding:4px 8px; font-size:0.75rem;" onclick="overrideDevice('${dev.mac}', '${dev.ip}', 'start')">Force ON</button>
               <button class="btn btn-danger" style="padding:4px 8px; font-size:0.75rem;" onclick="overrideDevice('${dev.mac}', '${dev.ip}', 'stop')">Force OFF</button>
               <button class="btn btn-outline" style="padding:4px 8px; font-size:0.75rem;" onclick="overrideDevice('${dev.mac}', '${dev.ip}', 'auto')">Auto Mode</button>
+              <button class="btn btn-outline" style="padding:4px 8px; font-size:0.75rem;" title="Invert float sensor polarity (toggle open vs closed when empty)" onclick="overrideDevice('${dev.mac}', '${dev.ip}', 'invert_sensor')">Invert Polarity</button>
             </div>
           </div>
 
